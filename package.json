@@ -1,0 +1,30 @@
+{
+  "name": "salam",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/x3bodee/Salam.git"
+  },
+  "keywords": [
+    "Salam",
+    "Arabic"
+  ],
+  "author": "x3bodee",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/x3bodee/Salam/issues"
+  },
+  "homepage": "https://github.com/x3bodee/Salam#readme",
+  "dependencies": {
+    "express": "^4.17.3"
+  },
+  "devDependencies": {
+    "dotenv": "^16.0.0",
+    "nodemon": "^2.0.15"
+  }
+}
