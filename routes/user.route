@@ -1,0 +1,17 @@
+const express = require('express')
+const router = express.Router();
+const bcrypt = require('bcryptjs');
+const jwt = require("jsonwebtoken");
+require('dotenv').config();
+// TODO: signin
+// TODO: signup
+// TODO: sginout
+
+// TODO: ask for teacher account (user)
+// TODO: teacher account request (admin)
+
+// TODO: find user
+// TODO: edit user info
+// TODO: delete user ****
+
+module.exports = router;
