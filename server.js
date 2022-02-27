@@ -6,9 +6,9 @@ const cors = require('cors');
 
 
 // to use the body
-app.use(express.urlencoded({ extended: false }))
+// app.use(express.urlencoded({ extended: false }))
 app.use(express.json());
-app.use(cors());
+// app.use(cors());
 
 // TODO: database conniction
 
@@ -33,6 +33,6 @@ app.get('/', function (req, res) {
   res.send('Hello World')
 });
 
-app.listen(3000,function(req,res){
+app.listen(PORT,function(req,res){
     console.log("teeest");
 });
