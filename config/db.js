@@ -8,12 +8,5 @@ const pool = mysql.createPool({
     password:process.env.DB_PASSWORD,
 })
 
-let querey = "SELECT * FROM user"
-
-pool.execute(querey,(err,result)=>{
-    if (err) throw err;
-
-    console.log(result)
-})
 
 module.exports = pool.promise();

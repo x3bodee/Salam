@@ -26,12 +26,9 @@ app.use(express.json());
 // app.use('/api/v1/session',require('./routes/session.route'))
 // app.use('/api/v1/review' ,require('./routes/review.route'))
 
+app.use('/api/v1/user',require('./routes/user.route'))
 
 
-
-app.get('/', function (req, res) {
-  res.send('Hello World')
-});
 
 app.listen(PORT,function(req,res){
     console.log("teeest");
