@@ -6,9 +6,9 @@ const cors = require('cors');
 
 
 // to use the body
-// app.use(express.urlencoded({ extended: false }))
+app.use(express.urlencoded({ extended: false }))
 app.use(express.json());
-// app.use(cors());
+app.use(cors());
 
 // TODO: database conniction
 
@@ -31,5 +31,5 @@ app.use('/api/v1/user',require('./routes/user.route'))
 
 
 app.listen(PORT,function(req,res){
-    console.log("teeest");
+    console.log("server is running");
 });
