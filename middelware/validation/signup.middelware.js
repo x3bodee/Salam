@@ -1,6 +1,7 @@
 const countryCodes = require('../../additional_recurce/countryCodes')
 const languages = require('../../additional_recurce/languages')
 const moment = require('moment');
+
 function isValidDate(dateString) {
     // First check for the pattern
     if (!/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateString))
@@ -8,8 +9,8 @@ function isValidDate(dateString) {
 
     // Parse the date parts to integers
     var parts = dateString.split("/");
-    var day = parseInt(parts[0], 10);
-    var month = parseInt(parts[1], 10);
+    var day = parseInt(parts[1], 10);
+    var month = parseInt(parts[0], 10);
     var year = parseInt(parts[2], 10);
 
     // Check the ranges of month and year
@@ -25,6 +26,7 @@ function isValidDate(dateString) {
     // Check the range of the day
     return day > 0 && day <= monthLength[month - 1];
 };
+
 module.exports = (req, res, next) => {
 
 
@@ -32,6 +34,16 @@ module.exports = (req, res, next) => {
     // console.log(req.body)
 
     let errors = []
+
+    if(!req.body.Fname) errors.push('missing field First Name')
+    if(!req.body.Lname) errors.push('missing field Last Name')
+    if(!req.body.email) errors.push('missing field Email')
+    if(!req.body.password) errors.push('missing field Password')
+    if(!req.body.password2) errors.push('missing field Password2')
+    // if(!req.body.gender || !req.body.gender === 0) errors.push('missing field Gender')
+    if(!req.body.country) errors.push('missing field Country')
+    if(!req.body.birth_date) errors.push('missing field Birth Date')
+    if(!req.body.language) errors.push('missing field Language')
 
     // Fname regex = ^[a-zA-Z]{3,20}
     const nameRegex = "^[a-zA-Z]{1,20}$"
@@ -59,7 +71,9 @@ module.exports = (req, res, next) => {
     const passRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
     regex = new RegExp(passRegex);
     let password = req.body.password;
-
+    let password2 = req.body.password2;
+    
+    if (password !== password2) errors.push("passwords not matched")
     if (!regex.test(password)) errors.push("password")
 
 
@@ -72,8 +86,9 @@ module.exports = (req, res, next) => {
     let country = req.body.country
 
     // birth_date
-    let birth_date = req.body.birth_date;
-    if (!moment(birth_date, 'DD/MM/YYYY', true).isValid() || !isValidDate(birth_date)) errors.push("birth_date")
+    let birth_date = new Date(req.body.birth_date);
+    let string_birth_date = req.body.birth_date
+    if (!moment(string_birth_date, 'MM/DD/YYYY', true).isValid() || !isValidDate(string_birth_date)) errors.push("birth_date")
 
     // created_at always == date.now
     let created_at = new Date().toLocaleDateString();
