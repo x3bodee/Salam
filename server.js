@@ -29,7 +29,6 @@ app.use(cors());
 app.use('/api/v1/user',require('./routes/user.route'))
 
 
-
 app.listen(PORT,function(req,res){
     console.log("server is running");
 });
