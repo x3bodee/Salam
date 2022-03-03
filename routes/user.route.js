@@ -12,6 +12,7 @@ const db2 = require('../config/db2');
 const signupValidation = require('../middelware/validation/signup.middelware');
 const signinValidation = require('../middelware/validation/signin.middelware');
 const teacherAccountRequestValidation = require('../middelware/validation/teacheraccount.middelware');
+const passwordValidation = require('../middelware/validation/changePassword.middelware');
 
 
 // authentications middelware
@@ -427,8 +428,68 @@ router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
 
 })
 
-// TODO: find user
+// TODO: get all user user
+router.get('/getAllUsers', isLoggedin, isAdmin ,async (req,res) => {
+    // lol
+    let sql = 'SELECT * FROM user RIGHT JOIN usertype ON usertype_id = userType ;'
+
+    let submit = 0
+    console.log(1)
+    try {  submit = await db.query(sql) }
+    catch (e) { 
+        if (e.code == "ER_BAD_NULL_ERROR") return res.status(400).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
+        return res.status(400).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
+    } 
+    if ( ! submit ) return res.status(400).json({msg:'error'})
+    let d = submit[0].map((e)=>{
+        return { user_id:e.user_id, Fname:e.Fname, Lname:e.Lname, gender:e.gender, email:e.email, country:e.country, birth_date:e.birth_date, language:e.language, UserType:e.userTitle, usertype_id:e.userType_id  }
+    })
+    console.log(d)
+    return res.status(200).json({data:d})
+
+})
+// TODO: find user (teacher)
+router.get('/getTeacher/',isLoggedin, (req,res) =>{
+    console.log('inside get teacher by id or email , or full name')
+    let id = undefined
+    let name = undefined
+    let email = undefined
+
+    if (req.query.id) id = req.query.id
+    if (req.query.name) name = req.query.name.split(' ')[0]
+    if (req.query.email) email = req.query.email
+
+    if ( id === undefined && name === undefined && email === undefined ) return res.status(400).json({msg:'you need to send email or id or first name'})
+
+    let sql = " SELECT * FROM user INNER JOIN usertype ON usertype_id = userType WHERE Fname LIKE ? OR  email LIKE ? OR user_id LIKE ? ";
+    db.query(sql,[name+"%",email+"%",id+"%"]).then((ele)=>{
+        console.log(ele)
+        
+        if ( ele[0].length < 1 ) return res.status(200).json({msg:"no item with your speicification has been found"})
+        
+        return res.status(200).json({data:ele[0].map((e)=>{
+            return { user_id:e.user_id, Fname:e.Fname, Lname:e.Lname, gender:e.gender, email:e.email, country:e.country, birth_date:e.birth_date, language:e.language, UserType:e.userTitle, usertype_id:e.userType_id  }
+        })})
+        
+    }).catch(err =>{
+        console.log(err)
+    })
+
+})
+
+// TODO: change password
+// ! include password validation
+router.post('/changePassword', isLoggedin,passwordValidation,(req,res) =>{
+
+    if(!res.locals.validatedData) return res.status(400).json({msg:"validation error"})
+    if(!res.locals.user) return res.status(400).json({msg:"user data not found"})
+    
+    
+
+})
+
 // TODO: edit user info
+
 // ? TODO: delete user ****
 
 
