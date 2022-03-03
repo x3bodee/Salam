@@ -6,6 +6,7 @@ const jwt = require("jsonwebtoken");
 
 require('dotenv').config({ path: `${__dirname}/../.env` });
 const db = require('../config/db');
+const db2 = require('../config/db2');
 
 // validations middelware
 const signupValidation = require('../middelware/validation/signup.middelware');
@@ -205,6 +206,7 @@ router.post('/editTeachReq', isLoggedin, isStudent, teacherAccountRequestValidat
 })
 
 // TODO: get all user requests for teacher account (user)
+// ! may need to add teacher permision
 router.get('/getMyTeachReq', isLoggedin, isStudent, async (req, res) => {
 
     let userID = res.locals.user.data.user_id
@@ -247,9 +249,11 @@ router.get('/getAllNewTeachReq', isLoggedin, isAdmin, async (req, res) => {
 })
 
 // TODO: approve or disapprove teacher account request (admin)
-// ! not done need to check if its work fine or not
+// // not done need to check if its work fine or not
 router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
 
+    console.log("inside processTechReq")
+    console.log(req.body)
     let errors = []
 
     let request_id = undefined
@@ -257,27 +261,31 @@ router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
     let status_txt = undefined
     let userID = undefined
 
+    let accept = process.env.ACCEPT || 1
+    let reject = process.env.REJECT || 0
+
     if (!req.body.request_id) errors.push('missing field Request ID')
     if (!req.body.userID) errors.push('missing field User ID')
     
-    if (!req.body.status) errors.push('missing field Status')
-    if (req.body.status != 0 || req.body.status != 1) errors.push('Status input is invalid')
+    // if (!req.body.status) errors.push('missing field Status')
 
+    if ( !( req.body.status > -1 && req.body.status < 2 ) ) errors.push('Status input is invalid')
+    
     if (!req.body.status_txt) errors.push('missing field Text')
 
 
-    if (errors.length > 0) res.status(400).json({ msg: "Invalid input", erorrslog: errors })
+    if (errors.length > 0) return res.status(400).json({ msg: "Invalid input", erorrslog: errors })
 
     request_id = req.body.request_id
     userID = req.body.userID
-    status = req.body.status
+    status = (req.body.status) ? 1 : 0;
     status_txt = req.body.status_txt
-
+    console.log(11111111)
+    // for rejection
     if (status === 0) {
         try {
 
-            // * this for 
-            let sql = 'UPDATE request SET status = 0, status_txt = ? WHERE request_id = ? && userID = ?'
+            let sql = 'UPDATE request SET status = '+reject+', status_txt = ? WHERE request_id = ? && userID = ?'
             let submit = await db.query(sql, [status_txt, request_id, userID])
             console.log(submit)
             return res.status(200).json({ msg: "user request teacher account has been rejected successfuly"})
@@ -290,60 +298,131 @@ router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
 
         }
 
+        // for accepting
     } else if (status === 1) {
+
         try {
-            // * this for 
-            
-            await db.beginTransaction( async (err) =>{
-                if (err) { throw err; }
-                let sql = 'UPDATE request SET status = 1, status_txt = ? WHERE request_id = ? && userID = ?'
-                await db.query(sql, [status_txt, request_id, userID],(err,result,fields) =>{
-                    if (error) {
-                        return connection.rollback(function() {
-                          throw error;
-                        });}
-                })
-                console.log(submit)
-                
-                sql = "UPDATE user SET userType = 3 WHERE userID = ?"
-                await db.query(sql, [ userID ],(err,result,fields) =>{
-                    if (error) {
-                        return connection.rollback(function() {
-                          throw error;
-                        });}
-                })
 
-                connection.commit(function(err) {
-                    if (err) {
-                      return connection.rollback(function() {
-                        throw err;
-                      });
+            console.log(222)
+            db2.beginTransaction(function (err) {
+                //
+                console.log(1)
+                if (err) { return res.status(400).json({ msg: "error starting change student to teacher" }) }
+                let sql = 'SELECT userType FROM user WHERE user_id = ?'
+                db2.query(sql, [userID], (err, result, fields) => {
+                    // console.log(result[0] != 2)
+                    if (err || result[0] != 2) {
+                        return db2.rollback(function () {
+                            // return "Erorr in update request query"
+                            if( result[0] != 2 ) return res.status(400).json({ msg: "user ether a teacher or admin"})
+                            if( err ) return res.status(400).json({ msg: "Someting went wrong", error:err })
+                            
+                        });// end of rollback #1
                     }
-                    console.log('success!');
-                    return res.status(200).json({ msg: "user request teacher account has been accepted successfuly"})
-                });// end of commit
-            }); // end of transaction
-           
-        } catch (e) {
-            return db.rollback(function() {
-                throw error;
-            });
+                    console.log(2)
+                    sql = 'UPDATE request SET status = ' + accept + ', status_txt = ? WHERE request_id = ? && userID = ?'
+                    db2.query(sql, [status_txt, request_id, userID], (err, result, fields) => {
+                        console.log(result.affectedRows)
+                        if (err || result.affectedRows === 0) {
+                            return db2.rollback(function () {
+                                // return "Erorr in update request query"
+                                return res.status(400).json({ msg: "error user ID or request ID is wrong" })
+                            });// end of rollback #1
+                        }
+                        console.log(3)
+                        sql = "UPDATE user SET userType = 3 WHERE user_id = ?"
+                        db2.query(sql, [userID], (err, result, fields) => {
+                            if (err || result.affectedRows === 0) {
+                                return db2.rollback(function () {
+                                    // return "Erorr in update user query"
+                                    return res.status(400).json({ msg: "error in updating user data" })
+                                });
+                            }
+
+                            db2.commit(function (err) {
+                                if (err) {
+                                    return db2.rollback(function () {
+                                        // return "Erorr commit query"
+                                        return res.status(400).json({ msg: "error in commitng the data" })
+                                    });
+                                }
+                                console.log('success!');
+                                return res.status(200).json({ msg: "user request teacher account has been accepted successfuly" })
+
+                            });// end of commit        
+                        })// end of query 2
+                    })// end of query 2
+                })// end of query 1
+            })// end of beginTransaction function
+
+        }catch(e){
+            return res.status(400).json({ msg: "error in trying to change student to teacher permisson" ,error:e}) 
         }
-    }
 
+    //         await db.getConnection( async(err,conn) => {
+    //             console.log(12)
+    //         await conn.beginTransaction( async (err) =>{
+    //             console.log(34)
+    //             if (err) { throw err; }
 
-    try {
-        // * this for 
-        let sql = 'UPDATE request SET status = ?, status_txt = ? WHERE request_id = ?'
-        let submit = await db.query(sql, [status, status_txt, request_id])
-        console.log(submit)
-        return res.status(200).json({ msg: "your update request has been send successfuly" })
+    //             let sql = 'UPDATE request SET status = '+accept+', status_txt = ? WHERE request_id = ? && userID = ?'
+    //             await conn.query(sql, [status_txt, request_id, userID], async (err,result,fields) =>{
+    //                 if (err) {
+    //                     return await conn.rollback(function() {
+    //                         return "Erorr in update request query"
+    //                         // throw err;
+    //                     });}
+                
+    //             console.log(submit)
+    //             console.log(56)
+    //             sql = "UPDATE user SET userType = 3 WHERE userID = ?"
+    //             await conn.query(sql, [ userID ], async (err,result,fields) =>{
+    //                 if (err) {
+    //                     return await conn.rollback(function() {
+    //                         return "Erorr in update user query"
+    //                         // throw err;
+    //                     });}
+                
+    //             console.log(78)
+    //             conn.commit( async function(err) {
+    //                 if (err) {
+    //                   return await conn.rollback(function() {
+    //                     return "Erorr commit query"
+    //                     // throw err;
+    //                   });
+    //                 }
+    //                 console.log('success!');
+    //                 return res.status(200).json({ msg: "user request teacher account has been accepted successfuly"})
+    //             });// end of commit
+    //         });// end of query 2
+    //     })// end of query 1
+    //             console.log(910)
+    //         }); // end of transaction
+           
+    //         })// end of getconn
+    //     } catch (e) {
+    //         return await conn.rollback(function(err) {
+    //             console.log(err)
+    //             return "Erorr beginTransaction query"
+    //             // throw error;
+    //         });
+    //     }
+    // }
+    // console.log(333)
 
-    } catch (e) {
-        if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        return res.status(400).json(e)
-    }
+    //// try {
+    //     // * this for 
+    // //    let sql = 'UPDATE request SET status = ?, status_txt = ? WHERE request_id = ?'
+    // //    let submit = await db.query(sql, [status, status_txt, request_id])
+    //  //   console.log(submit)
+    //  //   return res.status(200).json({ msg: "your update request has been send successfuly" })
+
+    //// } catch (e) {
+    ////     if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
+    // //    if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
+    // //    return res.status(400).json(e)
+    
+}
 
 
 })
