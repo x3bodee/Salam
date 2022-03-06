@@ -360,68 +360,6 @@ router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
             return res.status(400).json({ msg: "error in trying to change student to teacher permisson" ,error:e}) 
         }
 
-    //         await db.getConnection( async(err,conn) => {
-    //             console.log(12)
-    //         await conn.beginTransaction( async (err) =>{
-    //             console.log(34)
-    //             if (err) { throw err; }
-
-    //             let sql = 'UPDATE request SET status = '+accept+', status_txt = ? WHERE request_id = ? && userID = ?'
-    //             await conn.query(sql, [status_txt, request_id, userID], async (err,result,fields) =>{
-    //                 if (err) {
-    //                     return await conn.rollback(function() {
-    //                         return "Erorr in update request query"
-    //                         // throw err;
-    //                     });}
-                
-    //             console.log(submit)
-    //             console.log(56)
-    //             sql = "UPDATE user SET userType = 3 WHERE userID = ?"
-    //             await conn.query(sql, [ userID ], async (err,result,fields) =>{
-    //                 if (err) {
-    //                     return await conn.rollback(function() {
-    //                         return "Erorr in update user query"
-    //                         // throw err;
-    //                     });}
-                
-    //             console.log(78)
-    //             conn.commit( async function(err) {
-    //                 if (err) {
-    //                   return await conn.rollback(function() {
-    //                     return "Erorr commit query"
-    //                     // throw err;
-    //                   });
-    //                 }
-    //                 console.log('success!');
-    //                 return res.status(200).json({ msg: "user request teacher account has been accepted successfuly"})
-    //             });// end of commit
-    //         });// end of query 2
-    //     })// end of query 1
-    //             console.log(910)
-    //         }); // end of transaction
-           
-    //         })// end of getconn
-    //     } catch (e) {
-    //         return await conn.rollback(function(err) {
-    //             console.log(err)
-    //             return "Erorr beginTransaction query"
-    //             // throw error;
-    //         });
-    //     }
-    // }
-    // console.log(333)
-
-    //// try {
-    //     // * this for 
-    // //    let sql = 'UPDATE request SET status = ?, status_txt = ? WHERE request_id = ?'
-    // //    let submit = await db.query(sql, [status, status_txt, request_id])
-    //  //   console.log(submit)
-    //  //   return res.status(200).json({ msg: "your update request has been send successfuly" })
-
-    //// } catch (e) {
-    ////     if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-    // //    if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-    // //    return res.status(400).json(e)
     
 }
 
@@ -478,17 +416,93 @@ router.get('/getTeacher/',isLoggedin, (req,res) =>{
 })
 
 // TODO: change password
-// ! include password validation
-router.post('/changePassword', isLoggedin,passwordValidation,(req,res) =>{
+// // include password validation
+router.post('/changePassword', isLoggedin,passwordValidation, async (req,res) =>{
 
     if(!res.locals.validatedData) return res.status(400).json({msg:"validation error"})
     if(!res.locals.user) return res.status(400).json({msg:"user data not found"})
+
+    console.log(res.locals.user)
+
+
     
+
+        console.log(222)
+        db2.beginTransaction(   function (err) {
+            //
+            console.log(1)
+            if (err) { return res.status(400).json({ msg: "error starting change student to teacher" }) }
+            let sql = 'SELECT user_id,password FROM user WHERE user_id = ?'
+            db2.query(sql, [res.locals.user.data.user_id], async (err, result, fields) => {
+                
+
+                if (err) {
+                    return db2.rollback(function () {
+                        // return "Erorr in update request query"
+                        if( err ) return res.status(400).json({ msg: "user not found", error:err })
+                        
+                    });// end of rollback #1
+                }
+               
+                try{ 
+                    let passIsValid = await bcrypt.compare(req.body.originalPassword, result[0].password)
+                    if ( !passIsValid ) return res.status(400).json({msg:"password dont match the original password"})
+
+                }catch(e){
+                    res.status(400).json({msg:'something went wrong in compare',err:e})
+                }
+
+                console.log(2)
+                console.log(result[0])
+                let hashedPassword = "ss"
+
+                try{
+                    hashedPassword = await bcrypt.hash(req.body.newPassword, parseInt(salt))
+                }catch(e){
+                    res.status(400).json({msg:'something went wrong in hash',err:e})
+                }
+
+                if ( hashedPassword === "ss" ) res.status(400).json({msg:'something went wrong after hash'})
+
+                sql = 'UPDATE user SET password = ? WHERE user_id = ?'
+                db2.query(sql, [hashedPassword, result[0].user_id], (err, result, fields) => {
+                    console.log(result.affectedRows)
+                    if (err || result.affectedRows === 0) {
+                        return db2.rollback(function () {
+                            // return "Erorr in update request query"
+                            return res.status(400).json({ msg: "something went wrong in update" })
+                        });// end of rollback #2
+                    }
+                    console.log(3)
+
+                        db2.commit(function (err) {
+                            if (err) {
+                                return db2.rollback(function () {
+                                    // return "Erorr commit query"
+                                    return res.status(400).json({ msg: "error in commitng the data" })
+                                });
+                            }
+                            console.log('success!');
+                            return res.status(200).json({ msg: "change password request has been done successfuly" })
+
+                        });// end of commit        
+                    
+                })// end of query 2
+            })// end of query 1
+        })// end of beginTransaction function
+
     
+
 
 })
 
 // TODO: edit user info
+router.post('/editUserInfo',isLoggedin, (req,res) => {
+
+    
+
+
+})
 
 // ? TODO: delete user ****
 

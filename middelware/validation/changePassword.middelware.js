@@ -9,15 +9,16 @@ module.exports = (req, res, next) => {
 
     // password - Minimum eight characters, at least one uppercase letter, one lowercase letter, one number and one special character
     const passRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/
-    regex = new RegExp(passRegex);
+    let regex = new RegExp(passRegex);
 
     let originalPassword = req.body.originalPassword;
     let newPassword = req.body.newPassword;
     let newPassword2 = req.body.newPassword2;
     
-    if (newPassword !== newPassword2) errors.push("passwords not matched")
+    if (newPassword !== newPassword2) errors.push("passwords are mot matched")
+    if (newPassword === originalPassword) errors.push("new password and old password needs to be diffirent")
 
-    if (!regex.test(password)) errors.push("password")
+    if (!regex.test(originalPassword)) errors.push("password")
 
     if(errors.length > 0 ) return res.status(400).json({msg:"validation error", errorslog:errors})
 
