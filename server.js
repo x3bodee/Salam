@@ -27,6 +27,7 @@ app.use(cors());
 // app.use('/api/v1/review' ,require('./routes/review.route'))
 
 app.use('/api/v1/user',require('./routes/user.route'))
+app.use('/api/v1/subscription',require('./routes/subscription.route'))
 
 
 app.listen(PORT,function(req,res){
