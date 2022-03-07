@@ -86,8 +86,8 @@ router.post('/signup', signupValidation, async (req, res) => {
                         Fname: Fname,
                         Lname: Lname,
                     }
-
-                    const token = await jwt.sign({ data }, SECRET, { expiresIn: EXPIRESIN })
+                    console.log(EXPIRESIN)
+                    const token = await jwt.sign({ data }, SECRET, { expiresIn: parseInt(EXPIRESIN) })
                     let user = await jwt.verify(token, SECRET)
 
                     console.log(user.exp)
@@ -175,16 +175,17 @@ router.post('/signin', signinValidation, async (req, res) => {
 
                     if (passIsValid) {
 
-                        
+                        let date = new Date().toLocaleDateString();
                         let data = {
                             user_id: result[0].user_id,
                             userType: result[0].userType,
                             teach_status: result[0].teach_status,
                             Fname: result[0].Fname,
                             Lname: result[0].Lname,
+                            createdAt:date
                         }
-
-                        const token = await jwt.sign({ data }, SECRET, { expiresIn: EXPIRESIN })
+                        console.log("ssss:"+EXPIRESIN)
+                        const token = await jwt.sign({ data }, SECRET, { expiresIn: parseInt(EXPIRESIN) })
                         let user = await jwt.verify(token, SECRET)
                         console.log(user.exp)
                         let expiresIn = new Date(user.exp * 1000)

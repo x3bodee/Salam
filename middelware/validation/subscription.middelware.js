@@ -22,14 +22,14 @@ module.exports = (req, res, next) => {
     if (description.length < 10 || ar_description.length < 10) errors.push('description length must be >= 10')
 
     // created_at always == date.now
-    let created_at = new Date().toLocaleDateString();
+
 
     if (errors.length > 0) {
         return res.status(400).json({msg: "validation error", errorslog:errors})
     } else {
 
         res.locals.validatedData = {
-            title,ar_title,description,ar_description,price,created_at
+            title,ar_title,description,ar_description,price
         }
         next()
 
