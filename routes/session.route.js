@@ -1,13 +1,229 @@
 const express = require('express')
 const router = express.Router();
 
+require('dotenv').config({ path: `${__dirname}/../.env` });
+const db = require('../config/db');
+const db2 = require('../config/db2');
 
-// router.post('/signup', async (req, res) => {});
+// validations middelware
+const sessionValidation = require('../middelware/validation/session.middelware');
+
+// authentications middelware
+const isLoggedin = require('../middelware/authentication/isLoggedin.middelware');
+const isAdmin = require('../middelware/authentication/isAdmin.middelware');
+const isTeacher = require('../middelware/authentication/isTeacher.middelware');
+const isStudent = require('../middelware/authentication/isStudent.middelware');
+
+router.use(express.urlencoded({ extended: true }));
+router.use(express.json());
+
 
 // TODO: create session
+// ! needs more validation + need to check the durration and start time, end time
+// ! also need to check if there is already a session for this teacher with this time
+router.post('/', isLoggedin, isTeacher, sessionValidation, async (req, res) => {
+    let user_id = res.locals.user.data.user_id
+    let validatedData = res.locals.validatedData
+    console.log(user_id)
+    try{
+        db2.beginTransaction(function (err) {
+            console.log(1)
+            if (err) { return res.status(400).json({ msg: "error starting transaction for session creation" }) }
+
+            let sql = 'SELECT duration,subscription_title FROM subscription WHERE subscription_id = ?'
+            db2.query(sql, res.locals.validatedData.subscriptionID, async (err, result, fields) => {
+                if (err || result.length <= 0) {
+                    return db2.rollback(function () {
+                        console.log(result)
+                        if (result.length <= 0) return res.status(400).json({ msg: "Wrong subscription ID" })
+                        if (err.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+                        if (err) return res.status(400).json({ msg: "Someting went wrong", error: err })
+                    });// end of rollback #1
+                }// end of first if
+                console.log(result)
+                console.log(2)
+                let subscription = result
+
+                sql = "INSERT INTO session (subscriptionID,session_url,start_time,end_time,day_date,teacher_id) VALUES(?,?,?,?,?,?)"
+                db2.query(sql, [validatedData.subscriptionID,validatedData.session_url,validatedData.start_time,validatedData.end_time,new Date(validatedData.day_date),user_id], async (err, result, fields) => {
+
+                    if (err || result.length <= 0) {
+                        return db2.rollback(function () {
+    
+                            // if (result.length <= 0) return res.status(400).json({ msg: "something went wrong trying to inser session" })
+                            if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+                            if (err) return res.status(400).json({ msg: "Someting went wrong trying to insert session", error: err })
+                        });// end of rollback #1
+                    }// end of second if
+
+                    console.log(result)
+                    let session = result
+
+                    db2.commit(function (err) {
+                        if (err) {
+                            return db2.rollback(function () {
+                                // return "Erorr commit query"
+                                return res.status(400).json({ msg: "error in commitng the data" })
+                            });
+                        }
+                        console.log('success!');
+
+                        return res.status(200).json({ msg: "session has been created successfuly" })
+
+                    });// end of commit
+
+                }) // end of query 2
+
+            })// end of query 1
+
+        })// end of transaction
+
+    }catch(err){
+        res.status(400).json({mssg:"something went wrong"})
+    }
+    // try {
+    //     db2.beginTransaction(function (err) {
+    //         //
+    //         console.log(1)
+    //         if (err) { return res.status(400).json({ msg: "error starting change student to teacher" }) }
+
+    //         let sql = ' SELECT * FROM user WHERE email = ? '
+    //         db2.query(sql, email, async (err, result, fields) => {
+    //             // console.log(result[0] != 2)
+    //             if (err || result.length <= 0) {
+    //                 return db2.rollback(function () {
+
+    //                     if (result.length <= 0) return res.status(400).json({ msg: "Wrong email or password" })
+    //                     if (err.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+    //                     if (err) return res.status(400).json({ msg: "Someting went wrong", error: err })
+    //                 });// end of rollback #1
+    //             }
+    //             console.log(result)
+    //             console.log(result[0].password)
+    //             let passIsValid = await bcrypt.compare(password, result[0].password)
+
+    //             if (passIsValid) {
+
+    //                 let date = new Date().toLocaleDateString();
+    //                 let data = {
+    //                     user_id: result[0].user_id,
+    //                     userType: result[0].userType,
+    //                     teach_status: result[0].teach_status,
+    //                     Fname: result[0].Fname,
+    //                     Lname: result[0].Lname,
+    //                     createdAt: date
+    //                 }
+    //                 console.log("ssss:" + EXPIRESIN)
+    //                 const token = await jwt.sign({ data }, SECRET, { expiresIn: parseInt(EXPIRESIN) })
+    //                 let user = await jwt.verify(token, SECRET)
+    //                 console.log(user.exp)
+    //                 let expiresIn = new Date(user.exp * 1000)
+
+    //                 console.log(2)
+
+    //                 sql = 'UPDATE logs SET token = ?, expire_date = ?, status = ? WHERE user_id = ?'
+    //                 db2.query(sql, [token, expiresIn, 1, data.user_id], (err, result, fields) => {
+
+    //                     if (err) {
+    //                         return db2.rollback(function () {
+
+    //                             if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
+    //                             if (err.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+    //                             return res.status(400).json({ msg: "error user ID or request ID is wrong" })
+
+    //                         });// end of rollback #1
+    //                     }
+    //                     console.log(3)
+
+    //                     db2.commit(function (err) {
+    //                         if (err) {
+    //                             return db2.rollback(function () {
+    //                                 // return "Erorr commit query"
+    //                                 return res.status(400).json({ msg: "error in commitng the data" })
+    //                             });
+    //                         }
+    //                         console.log('success!');
+    //                         return res.status(200).json({ msg: "user has been logged in successfuly", token })
+
+    //                     });// end of commit        
+
+    //                 })// end of query 2
+    //             }// end of if
+    //             else return res.status(404).json({ msg: "Wrong email or password" })
+    //         })// end of query 1
+    //     })// end of beginTransaction function
+
+    // } catch (e) {
+
+    //     if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
+    //     if (err.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+
+    //     return res.status(404).json(e)
+    // }
+
+})
+
+// TODO: find session by teacher ID
+router.get('/byTeacherid',isLoggedin, async (req,res) => {
+    if ( !req.query.teacher_id ) return res.status(400).json({msg: "teacher id is missing"})
+    console.log(req.query.teacher_id)
+    let teacher_id = req.query.teacher_id
+
+    try {
+        let sql = "SELECT * FROM session WHERE teacher_id = ? AND session_status = 1"
+        let submit = await db.query(sql,teacher_id)
+
+        if ( submit[0].length < 1) return res.status(404).json({msg: "there is no session available"})
+        console.log(submit)
+        return res.status(404).json({data:submit[0]})
+
+    }catch(err){
+        if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+        return res.status(400).json({msg: "something went wrong", err})
+    }
+
+})
+
 // TODO: find session
-// TODO: edit session
+router.get('/',isLoggedin, isAdmin, async (req,res) => {
+
+    try {
+        let sql = "SELECT * FROM session WHERE session_status = 1"
+        let submit = await db.query(sql)
+
+        if ( submit[0].length < 1) return res.status(404).json({msg: "there is no session available"})
+        console.log(submit)
+        return res.status(404).json({data:submit[0]})
+
+    }catch(err){
+        if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+        return res.status(400).json({msg: "something went wrong", err})
+    }
+
+})
+
 // TODO: delete session
+router.delete('/',isLoggedin, isTeacher, async (req,res) => {
+    if ( !req.body.session_id ) return res.status(400).json({msg: "session id is missing"})
+    console.log(req.body.session_id)
+    let session_id = req.body.session_id
+
+    try {
+        let sql = "DELETE FROM session WHERE session_status = 1 AND session_id = ?"
+        let submit = await db.query(sql,session_id)
+
+        if ( !submit[0].affectedRows) return res.status(404).json({msg: "there is no session with your specification"})
+        console.log(submit)
+        return res.status(404).json({msg:"session has been deleted successfuly"})
+
+    }catch(err){
+        if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+        return res.status(400).json({msg: "something went wrong", err})
+    }
+
+})
+
+// // TODO: edit session
 
 
 
@@ -15,4 +231,4 @@ const router = express.Router();
 // TODO: submit sesstion end (teacher)
 // TODO: confirm sesstion end (admin)
 
-module.exports=router 
+module.exports = router 
