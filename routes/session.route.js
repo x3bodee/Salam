@@ -7,12 +7,14 @@ const db2 = require('../config/db2');
 
 // validations middelware
 const sessionValidation = require('../middelware/validation/session.middelware');
+const submitSessionEndValidation = require('../middelware/validation/submitSessionEnd.middelware');
 
 // authentications middelware
 const isLoggedin = require('../middelware/authentication/isLoggedin.middelware');
 const isAdmin = require('../middelware/authentication/isAdmin.middelware');
 const isTeacher = require('../middelware/authentication/isTeacher.middelware');
 const isStudent = require('../middelware/authentication/isStudent.middelware');
+const { BD } = require('../additional_recurce/countryCodes');
 
 router.use(express.urlencoded({ extended: true }));
 router.use(express.json());
@@ -81,86 +83,7 @@ router.post('/', isLoggedin, isTeacher, sessionValidation, async (req, res) => {
     }catch(err){
         res.status(400).json({mssg:"something went wrong"})
     }
-    // try {
-    //     db2.beginTransaction(function (err) {
-    //         //
-    //         console.log(1)
-    //         if (err) { return res.status(400).json({ msg: "error starting change student to teacher" }) }
-
-    //         let sql = ' SELECT * FROM user WHERE email = ? '
-    //         db2.query(sql, email, async (err, result, fields) => {
-    //             // console.log(result[0] != 2)
-    //             if (err || result.length <= 0) {
-    //                 return db2.rollback(function () {
-
-    //                     if (result.length <= 0) return res.status(400).json({ msg: "Wrong email or password" })
-    //                     if (err.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
-    //                     if (err) return res.status(400).json({ msg: "Someting went wrong", error: err })
-    //                 });// end of rollback #1
-    //             }
-    //             console.log(result)
-    //             console.log(result[0].password)
-    //             let passIsValid = await bcrypt.compare(password, result[0].password)
-
-    //             if (passIsValid) {
-
-    //                 let date = new Date().toLocaleDateString();
-    //                 let data = {
-    //                     user_id: result[0].user_id,
-    //                     userType: result[0].userType,
-    //                     teach_status: result[0].teach_status,
-    //                     Fname: result[0].Fname,
-    //                     Lname: result[0].Lname,
-    //                     createdAt: date
-    //                 }
-    //                 console.log("ssss:" + EXPIRESIN)
-    //                 const token = await jwt.sign({ data }, SECRET, { expiresIn: parseInt(EXPIRESIN) })
-    //                 let user = await jwt.verify(token, SECRET)
-    //                 console.log(user.exp)
-    //                 let expiresIn = new Date(user.exp * 1000)
-
-    //                 console.log(2)
-
-    //                 sql = 'UPDATE logs SET token = ?, expire_date = ?, status = ? WHERE user_id = ?'
-    //                 db2.query(sql, [token, expiresIn, 1, data.user_id], (err, result, fields) => {
-
-    //                     if (err) {
-    //                         return db2.rollback(function () {
-
-    //                             if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-    //                             if (err.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
-    //                             return res.status(400).json({ msg: "error user ID or request ID is wrong" })
-
-    //                         });// end of rollback #1
-    //                     }
-    //                     console.log(3)
-
-    //                     db2.commit(function (err) {
-    //                         if (err) {
-    //                             return db2.rollback(function () {
-    //                                 // return "Erorr commit query"
-    //                                 return res.status(400).json({ msg: "error in commitng the data" })
-    //                             });
-    //                         }
-    //                         console.log('success!');
-    //                         return res.status(200).json({ msg: "user has been logged in successfuly", token })
-
-    //                     });// end of commit        
-
-    //                 })// end of query 2
-    //             }// end of if
-    //             else return res.status(404).json({ msg: "Wrong email or password" })
-    //         })// end of query 1
-    //     })// end of beginTransaction function
-
-    // } catch (e) {
-
-    //     if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-    //     if (err.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
-
-    //     return res.status(404).json(e)
-    // }
-
+    
 })
 
 // TODO: find session by teacher ID
@@ -202,6 +125,23 @@ router.get('/',isLoggedin, isAdmin, async (req,res) => {
 
 })
 
+// TODO: gest teacher by subscription and sessions
+router.get('/selectTeacher', isLoggedin, async (req,res) => {
+    if(!req.query.subscriptionID) return res.status(400).json({msg:"missing subscription ID"})
+
+    try{
+        
+        let sql = 'SELECT session_id,teacher_id,Fname,Lname FROM session JOIN user ON teacher_id = user_id JOIN user ON teacher_id = user_id WHERE subscriptionID = ? AND session_status =1'
+        let submit = await db.query(sql,req.query.subscriptionID)
+        if (submit[0].length < 1) return res.status(404).json({msg: "not found"})
+        console.log(submit[0])
+
+    }catch(err){
+        if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+        return res.status(400).json({msg: "something went wrong", err})
+    }
+})
+
 // TODO: delete session
 router.delete('/',isLoggedin, isTeacher, async (req,res) => {
     if ( !req.body.session_id ) return res.status(400).json({msg: "session id is missing"})
@@ -224,6 +164,74 @@ router.delete('/',isLoggedin, isTeacher, async (req,res) => {
 })
 
 // // TODO: edit session
+
+// TODO: submit session end
+router.post('/endSession',isLoggedin, isTeacher, submitSessionEndValidation, async (req,res) => {
+    let data = res.locals.validatedData
+    try{
+        
+        db2.beginTransaction((err)=>{
+            if (err) return res.status(404).json({msg:"error in starting transaction"})
+
+            console.log(1)
+            let sql = 'SELECT teacher_id FROM session WHERE session_id = ? AND session_status = 0'
+            db2.query(sql,[data.sessionID], (err, result, fields) => {
+                if (err){
+                    return db2.rollback(()=>{
+                        if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+                        return res.status(404).json({ msg: "error in first query" })
+                    })// end of rollback
+                }// end of if err
+                
+                if(!result.length) return db2.rollback(()=>{ 
+                    return res.status(404).json({ msg:"not found" }) 
+                })// end of rollback
+                
+                if(result[0].teacher_id !== data.teacher_id) return db2.rollback(()=>{
+                    return res.status(400).json({ msg:"only the user that created the session can end it" })
+                })// end of rollback
+                 
+
+
+                console.log(2)
+                sql = 'INSERT INTO sessionconfirmation (sessionID,teacher_review,teacher_id) VALUES(?,?,?)'
+                db2.query(sql,[ data.sessionID, data.teacher_review, data.teacher_id ] , (err, result, fields) =>{
+                    if (err || result.length <= 0){
+                        return db2.rollback(()=>{
+                            if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+                            return res.status(404).json({ msg: "error in trying to insert" })
+                        })// end of rollback
+                    }// end of if err
+
+                    console.log(3)
+                    db2.commit((err) => {
+                        if (err){
+                            return db2.rollback(()=>{
+                                if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+                                return res.status(404).json({ msg: "error in trying to insert" })
+                            })// end of rollback
+                        }// end of if err
+                        
+                        console.log("submission end")
+                        return res.status(200).json({msg: "success"})
+                        
+                    })// end of commit
+
+                })// end of the second query
+            })// end of first query
+        })// end of transaction
+
+
+    }catch(err){
+        if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+        return res.status(400).json({msg: "something went wrong", err})
+    }
+})
+
+// TODO: confirm session end
+router.post('/confirmSessionEnd',isLoggedin, isAdmin, async (req,res) => {
+    
+})
 
 
 

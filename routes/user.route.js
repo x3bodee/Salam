@@ -412,11 +412,11 @@ router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
                 if (err) { return res.status(400).json({ msg: "error starting change student to teacher" }) }
                 let sql = 'SELECT userType FROM user WHERE user_id = ?'
                 db2.query(sql, [userID], (err, result, fields) => {
-                    // console.log(result[0] != 2)
-                    if (err || result[0] != 2) {
+                    console.log(result[0].userType)
+                    if (err || result[0].userType != 2) {
                         return db2.rollback(function () {
                             // return "Erorr in update request query"
-                            if (result[0] != 2) return res.status(400).json({ msg: "user ether a teacher or admin" })
+                            if (result[0].userType != 2) return res.status(400).json({ msg: "user ether a teacher or admin" })
                             if (err) return res.status(400).json({ msg: "Someting went wrong", error: err })
 
                         });// end of rollback #1
