@@ -125,17 +125,17 @@ router.get('/',isLoggedin, isAdmin, async (req,res) => {
 
 })
 
-// TODO: gest teacher by subscription and sessions
+// TODO: get teacher by subscription and sessions
 router.get('/selectTeacher', isLoggedin, async (req,res) => {
     if(!req.query.subscriptionID) return res.status(400).json({msg:"missing subscription ID"})
-
+    console.log("start")
     try{
         
-        let sql = 'SELECT session_id,teacher_id,Fname,Lname FROM session JOIN user ON teacher_id = user_id JOIN user ON teacher_id = user_id WHERE subscriptionID = ? AND session_status =1'
+        let sql = 'SELECT session_id,teacher_id,Fname,Lname FROM session JOIN user ON teacher_id = user_id WHERE subscriptionID = ? AND session_status =1'
         let submit = await db.query(sql,req.query.subscriptionID)
         if (submit[0].length < 1) return res.status(404).json({msg: "not found"})
         console.log(submit[0])
-
+        return res.status(200).json({msg: "success", result: submit[0]})
     }catch(err){
         if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
         return res.status(400).json({msg: "something went wrong", err})
@@ -160,12 +160,13 @@ router.delete('/',isLoggedin, isTeacher, async (req,res) => {
         if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
         return res.status(400).json({msg: "something went wrong", err})
     }
-
+    
 })
 
 // // TODO: edit session
 
-// TODO: submit session end
+
+// TODO: submit sesstion end (teacher)
 router.post('/endSession',isLoggedin, isTeacher, submitSessionEndValidation, async (req,res) => {
     let data = res.locals.validatedData
     try{
@@ -228,15 +229,64 @@ router.post('/endSession',isLoggedin, isTeacher, submitSessionEndValidation, asy
     }
 })
 
-// TODO: confirm session end
-router.post('/confirmSessionEnd',isLoggedin, isAdmin, async (req,res) => {
+
+// TODO: get all the confirmed session end under revision (admin)
+router.get('/confirmedSessionEnd', isLoggedin, isAdmin, async (req,res) =>{
+    console.log(1)
+    
+    try {
+        
+        let sql = "select confirmation_id, sessionID, teacher_id, teacher_review, status FROM sessionconfirmation WHERE status = 0 "
+        let result = await db.query(sql)
+        console.log(result[0])
+        if ( result[0].length < 1 ) return res.status(404).json( { msg:"not found" } )
+        
+        return res.status(200).json( { msg: "success", result:result[0] } )
+
+    } catch (err) {
+        if (err.code) return res.status(404).json( { msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage } )
+        return res.status(400).json({ msg: "something went wrong", err })
+    }
+})
+
+// TODO: confirm sesstion end (admin)
+router.put('/confirmSessionEnd',isLoggedin, isAdmin, async (req,res) => {
+    let errors = []
+    if ( !req.body.confirmation_id ) errors.push("Confirmation ID")
+    if ( !req.body.admin_review || req.body.admin_review.length < 1 ) errors.push("Admin Review")
+    // console.log (req.body.status === undefined)
+    if ( req.body.status === undefined || ( req.body.status > 1 || req.body.status < 0)) errors.push("status")
+    // console.log(res.locals.user.data.user_id)
+    if ( !res.locals.user.data.user_id ) errors.push("user")
+    console.log(errors.length)
+    console.log(req.body)
+    if ( errors.length ) return res.status(400).json({ msg: "missing inputs", input:errors })
+
+    let admin_id = res.locals.user.data.user_id
+
+    let confirmation_id = req.body.confirmation_id
+    let admin_review = req.body.admin_review
+    let status = req.body.status
+
+    try {
+       
+        let sql = "UPDATE sessionconfirmation set admin_id = ?, admin_review = ?, status = ?  WHERE confirmation_id = ? AND status = 0"
+        let submit = await db.query(sql,[ admin_id, admin_review, status, confirmation_id ])
+        console.log(submit)
+        if (submit[0].affectedRows === 0) return res.status(400).json({msg:"err in affected rows"})
+
+        return res.status(200).json({msg:"respond has been send", result: submit[0]})
+
+    } catch (err) {
+        if (err.code) return res.status(404).json( { msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage } )
+        return res.status(400).json({ msg: "something went wrong", err })
+    }
     
 })
 
 
 
 
-// TODO: submit sesstion end (teacher)
-// TODO: confirm sesstion end (admin)
+
 
 module.exports = router 
