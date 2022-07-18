@@ -26,13 +26,12 @@ app.use(cors());
 // app.use('/api/v1/session',require('./routes/session.route'))
 // app.use('/api/v1/review' ,require('./routes/review.route'))
 
+app.use('/api/v1/user',require('./routes/user.route'))
+app.use('/api/v1/subscription',require('./routes/subscription.route'))
+app.use('/api/v1/session',require('./routes/session.route'))
+app.use('/api/v1/booking',require('./routes//booking.route'))
 
 
-
-app.get('/', function (req, res) {
-  res.send('Hello World')
-});
-
-app.listen(3000,function(req,res){
-    console.log("teeest");
+app.listen(PORT,function(req,res){
+    console.log("server is running");
 });
