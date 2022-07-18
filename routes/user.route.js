@@ -34,11 +34,11 @@ router.use(express.json());
 
 // * this route for testing the authentications
 router.get('/test', isLoggedin, (req, res) => {
-    res.send("hi from user route ")
+    res.status(200).json({msg:"success"})
 })
 
 
-
+// TODO: check  signupValidation if it's null
 router.post('/signup', signupValidation, async (req, res) => {
 
     // console.log("1")
@@ -351,6 +351,8 @@ router.get('/getAllNewTeachReq', isLoggedin, isAdmin, async (req, res) => {
 })
 
 // TODO: approve or disapprove teacher account request (admin)
+
+// TODO: teach_ status check if it's need change after accepts
 // // not done need to check if its work fine or not
 router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
 
