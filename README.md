@@ -10,7 +10,7 @@ This repository represent the back-end logic for this website. it's build as an 
 *  MySql
 
 ### Libraries:
-*  Cors
+*  cors
 *  bcryptjs
 *  jsonwebtoken
 *  moment
@@ -18,5 +18,5 @@ This repository represent the back-end logic for this website. it's build as an 
 
 <!-- 
 ### External APIs
-*   zoom
+*  zoom
  -->
