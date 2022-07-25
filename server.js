@@ -29,7 +29,8 @@ app.use(cors());
 app.use('/api/v1/user',require('./routes/user.route'))
 app.use('/api/v1/subscription',require('./routes/subscription.route'))
 app.use('/api/v1/session',require('./routes/session.route'))
-app.use('/api/v1/booking',require('./routes//booking.route'))
+app.use('/api/v1/booking',require('./routes/booking.route'))
+app.use('/api/v1/test',require('./routes/test.route'))
 
 
 app.listen(PORT,function(req,res){
