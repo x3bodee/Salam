@@ -444,10 +444,10 @@ router.post('/createTeachReq', isLoggedin, isStudent, teacherAccountRequestValid
     
     } catch (err) {
         // in case the error from db then this is a general error msg for it
-        if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
             
         // this to captrue any error and try to send the error msg if it's applicable.
-        return res.status(400).json({ msg: "Someting went wrong", error: err })
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }
 
 
@@ -487,34 +487,40 @@ router.post('/editTeachReq', isLoggedin, isStudent, teacherAccountRequestValidat
 
     } catch (err) {
         // in case the error from db then this is a general error msg for it
-        if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
             
         // this to captrue any error and try to send the error msg if it's applicable.
-        return res.status(400).json({ msg: "Someting went wrong", error: err })
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }
 
 
 })
 
 // TODO: get all user requests for teacher account (user)
-// ! may need to remove teacher permision
-router.get('/getMyTeachReq', isLoggedin, isStudent, isTeacher, async (req, res) => {
+///// ! may need to remove teacher permision
+router.get('/getMyTeachReq', isLoggedin, async (req, res) => {
 
+    // basic information
     let userID = res.locals.user.data.user_id
 
     try {
 
+        // get all requests for this user by his id.
         let sql = 'SELECT * FROM request WHERE userID = ?'
-        let submit = await db.query(sql, [userID])
-        
+        let submit = await db2.query(sql, [userID])
+
+        // in case there is no request by this user 
+        if (submit[0].length <= 0) return res.status(503).json({ msg: "not found"})
+
+
         return res.status(200).json({ msg: "success", data: submit[0] })
 
     } catch (err) {
         // in case the error from db then this is a general error msg for it
-        if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
             
         // this to captrue any error and try to send the error msg if it's applicable.
-        return res.status(400).json({ msg: "Someting went wrong", error: err })
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }
 
 
@@ -523,19 +529,22 @@ router.get('/getMyTeachReq', isLoggedin, isStudent, isTeacher, async (req, res) 
 // TODO: get all unrevisioned requests for teacher account (admin)
 router.get('/getAllNewTeachReq', isLoggedin, isAdmin, async (req, res) => {
 
-    // let userID = res.locals.user.data.user_id
-
     try {
-
+        // get all request where there status is unrevisioned
         let sql = 'SELECT * FROM request WHERE status = 2'
-        let submit = await db.query(sql)
-        console.log(submit[0])
-        return res.status(200).json({ msg: "success", data: submit[0] })
+        let submit = await db2.query(sql)
+        
+        // in case there is no request by this user 
+        if (submit[0].length <= 0) return res.status(503).json({ success: true, msg: "not found"})
 
-    } catch (e) {
-        if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        return res.status(400).json(e)
+        return res.status(200).json({ success: true, msg: "success", data: submit[0] })
+
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }
 
 
@@ -545,32 +554,35 @@ router.get('/getAllNewTeachReq', isLoggedin, isAdmin, async (req, res) => {
 
 // TODO: teach_ status check if it's need change after accepts
 // // not done need to check if its work fine or not
+// ! need to check if I need to just change the requests where the status is only 2 or I leave it as a genral case
 router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
 
-    console.log("inside processTechReq")
-    console.log(req.body)
-    let errors = []
 
+    // basic variable I need
+    let errors = []
     let request_id = undefined
     let status = undefined
     let status_txt = undefined
     let userID = undefined
 
+    // get the accept code and reject code from the env
     let accept = process.env.ACCEPT || 1
     let reject = process.env.REJECT || 0
 
+    // in case there is not request_id or user_id then push these errors to the errors array
     if (!req.body.request_id) errors.push('missing field Request ID')
     if (!req.body.userID) errors.push('missing field User ID')
 
     // if (!req.body.status) errors.push('missing field Status')
 
+    // if the status is not 0,1,2 and there is no status_txt then push these errors to the errors array
     if (!(req.body.status > -1 && req.body.status < 2)) errors.push('Status input is invalid')
-
     if (!req.body.status_txt) errors.push('missing field Text')
 
+    // if the errors array length is > 0 then send response with bad request
+    if (errors.length > 0) return res.status(400).json({success:false, msg: "Invalid input", erorrslog: errors })
 
-    if (errors.length > 0) return res.status(400).json({ msg: "Invalid input", erorrslog: errors })
-
+    // set the basic information
     request_id = req.body.request_id
     userID = req.body.userID
     status = (req.body.status) ? 1 : 0;
@@ -581,16 +593,16 @@ router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
         try {
 
             let sql = 'UPDATE request SET status = ' + reject + ', status_txt = ? WHERE request_id = ? && userID = ?'
-            let submit = await db.query(sql, [status_txt, request_id, userID])
+            let submit = await db2.query(sql, [status_txt, request_id, userID])
             console.log(submit)
             return res.status(200).json({ msg: "user request teacher account has been rejected successfuly" })
 
-        } catch (e) {
-
-            if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-            if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-            return res.status(400).json(e)
-
+        } catch (err) {
+            // in case the error from db then this is a general error msg for it
+            if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+                
+            // this to captrue any error and try to send the error msg if it's applicable.
+            return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
         }
 
         // for accepting
@@ -598,86 +610,89 @@ router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
 
         try {
 
-            console.log(222)
-            db2.beginTransaction(function (err) {
-                //
-                console.log(1)
-                if (err) { return res.status(400).json({ msg: "error starting change student to teacher" }) }
-                let sql = 'SELECT userType FROM user WHERE user_id = ?'
-                db2.query(sql, [userID], (err, result, fields) => {
-                    console.log(result[0].userType)
-                    if (err || result[0].userType != 2) {
-                        return db2.rollback(function () {
-                            // return "Erorr in update request query"
-                            if (result[0].userType != 2) return res.status(400).json({ msg: "user ether a teacher or admin" })
-                            if (err) return res.status(400).json({ msg: "Someting went wrong", error: err })
-
-                        });// end of rollback #1
-                    }
-                    console.log(2)
-                    sql = 'UPDATE request SET status = ' + accept + ', status_txt = ? WHERE request_id = ? && userID = ?'
-                    db2.query(sql, [status_txt, request_id, userID], (err, result, fields) => {
-                        console.log(result.affectedRows)
-                        if (err || result.affectedRows === 0) {
-                            return db2.rollback(function () {
-                                // return "Erorr in update request query"
-                                return res.status(400).json({ msg: "error user ID or request ID is wrong" })
-                            });// end of rollback #1
-                        }
-                        console.log(3)
-                        sql = "UPDATE user SET userType = 3 WHERE user_id = ?"
-                        db2.query(sql, [userID], (err, result, fields) => {
-                            if (err || result.affectedRows === 0) {
-                                return db2.rollback(function () {
-                                    // return "Erorr in update user query"
-                                    return res.status(400).json({ msg: "error in updating user data" })
-                                });
-                            }
-
-                            db2.commit(function (err) {
-                                if (err) {
-                                    return db2.rollback(function () {
-                                        // return "Erorr commit query"
-                                        return res.status(400).json({ msg: "error in commitng the data" })
-                                    });
-                                }
-                                console.log('success!');
-                                return res.status(200).json({ msg: "user request teacher account has been accepted successfuly" })
-
-                            });// end of commit        
-                        })// end of query 2
-                    })// end of query 2
-                })// end of query 1
-            })// end of beginTransaction function
-
-        } catch (e) {
-            return res.status(400).json({ msg: "error in trying to change student to teacher permisson", error: e })
-        }
+            // console.log(222)
+            // start transaction
+            await db2.beginTransaction();
+            console.log("phase 1 done");
+            
+            // get the user type by his id just to check if the user is not admin or teacher
+            let sql = 'SELECT userType FROM user WHERE user_id = ?';
+            const [submit,meta] = await db2.query(sql, [userID]);
+            
+            // if the submit length is 0 then the request is wrong
+            if (submit.length <= 0) return res.status(400).json({ success:false, msg: "ether this user or request in not available" }); 
+            // if the user type is not 2 then this user is eather admin or a teacher
+            if (submit[0].userType != 2) return res.status(400).json({ success:false, msg: "user ether a teacher or admin" }); 
+            // console.log(333)
+            
+            await db2.commit();
+            console.log("phase 2 done");
+            
+            // update the request information
+            sql = 'UPDATE request SET status = ' + accept + ', status_txt = ? WHERE request_id = ? && userID = ?';
+            const [submit2,meta2] = await db2.query(sql, [status_txt, request_id, userID]);
+            // in case there is no affected rows then this mean the user id or request id is wrong
+            if (submit2.affectedRows === 0) return res.status(400).json({ success:false, msg: "error user ID or request ID is wrong" });
+            
+            await db2.commit();
+            console.log("phase 3 done");
+            // console.log(444)
+            
+            // update user type information in user table
+            sql = "UPDATE user SET userType = 3 WHERE user_id = ?";
+            const [submit3,meta3] = await db2.query(sql, [userID]);
+            // in case there is no affected rows then this means there is no such a user with this id
+            if (submit3.affectedRows === 0) return res.status(400).json({ success:false, msg: "error in updating the user data" });
+            await db2.commit();
+            
+            console.log('success!');
+            return res.status(200).json({ msg: "user request teacher account has been accepted successfuly" })
 
 
-    }
+            }// END OF THE TRY FOR THE TRY FOR THE TRANSACTION 
+            catch (err) {
+                // in case the error from db then this is a general error msg for it
+                if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+                
+                // this to captrue any error and try to send the error msg if it's applicable.
+                return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
+            }// END OF THE CATCH
+
+
+    }// END OF THE ELSE
 
 
 })
 
-// TODO: get all user user
-router.get('/getAllUsers', isLoggedin, isAdmin, async (req, res) => {
-    // lol
-    let sql = 'SELECT * FROM user RIGHT JOIN usertype ON usertype_id = userType ;'
+// TODO: get all user user (admin)
+router.get('/getAllUsers', isLoggedin, isAdmin, async (req, res) => { 
+    
+    try {
 
-    let submit = 0
-    console.log(1)
-    try { submit = await db.query(sql) }
-    catch (e) {
-        if (e.code == "ER_BAD_NULL_ERROR") return res.status(400).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        return res.status(400).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
+        // get all users information with the user type sorted by their ids
+        let sql = 'SELECT user_id,Fname,Lname,gender,email,country,birth_date,created_at,phone,account_status,teach_status,language,userTitle,userType FROM user RIGHT JOIN usertype ON usertype_id = userType order by user_id ASC  ;'
+        const submit = await db2.query(sql) 
+
+        // in case there is no users just return this
+        if( submit[0].length <= 0) return res.status(503).json({ success: true, msg: "not found"})
+
+
+        return res.status(200).json({ success: true, msg: "success", data: submit[0].map((e) => {
+            return { user_id: e.user_id, Fname: e.Fname, Lname: e.Lname, gender: e.gender,
+            email: e.email, country: e.country, birth_date: e.birth_date, language: e.language,
+            UserType: e.userTitle, usertype_id: e.userType_id, teach_status: e.teach_status,
+            account_status: e.account_status, phone: e.phone,joined_at: e.created_at }
+            })// end of map func
+        })// end of json
+
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }
-    if (!submit) return res.status(400).json({ msg: 'error' })
-    let d = submit[0].map((e) => {
-        return { user_id: e.user_id, Fname: e.Fname, Lname: e.Lname, gender: e.gender, email: e.email, country: e.country, birth_date: e.birth_date, language: e.language, UserType: e.userTitle, usertype_id: e.userType_id }
-    })
-    console.log(d)
-    return res.status(200).json({ data: d })
+
 
 })
 // TODO: find user (teacher)
