@@ -33,7 +33,7 @@ router.post('/', isLoggedin, isTeacher, sessionValidation, async (req, res) => {
             if (err) { return res.status(400).json({ msg: "error starting transaction for session creation" }) }
 
             let sql = 'SELECT duration,subscription_title FROM subscription WHERE subscription_id = ?'
-            db2.query(sql, res.locals.validatedData.subscriptionID, async (err, result, fields) => {
+            db2.query(sql, validatedData.subscriptionID, async (err, result, fields) => {
                 if (err || result.length <= 0) {
                     return db2.rollback(function () {
                         console.log(result)

@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 require('dotenv').config({ path: `${__dirname}/../.env` });
-const db = require('../../config/db');
+const db = require('../../config/db2');
 const SECRET = process.env.SECRET 
 
 module.exports = async ( req, res, next ) => {

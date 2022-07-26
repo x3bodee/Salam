@@ -37,8 +37,86 @@ router.get('/test', isLoggedin, (req, res) => {
     res.status(200).json({msg:"success"})
 })
 
+// TODO: check signupValidation if it's null
+router.post('/signup', signupValidation, async (req, res) => {
 
-// TODO: check  signupValidation if it's null
+    if (res.locals.erorrslog) { return res.status(400).json({ msg: "validation error", errors: res.locals.erorrslog }) }
+    else{
+
+        if (!res.locals.validatedData) return res.status(500).json({ msg: "validation internal error" });
+
+        try {
+            
+            // hash the password
+            let hashedPassword = await bcrypt.hash(res.locals.validatedData.password, parseInt(salt))
+            res.locals.validatedData.password = hashedPassword 
+            
+            // basic information.
+            let Fname = res.locals.validatedData.Fname
+            let Lname = res.locals.validatedData.Lname
+            let password = res.locals.validatedData.password
+            let gender = res.locals.validatedData.gender
+            let email = res.locals.validatedData.email
+            let country = res.locals.validatedData.country
+            let birth_date = res.locals.validatedData.birth_date
+            let language = res.locals.validatedData.language
+
+            await db2.beginTransaction();
+
+            console.log("phase 1 done");
+            // first: insert to insert the user information
+            let sql = ' INSERT INTO user (Fname,Lname,email,password,gender,country,birth_date,language) VALUES(?,?,?,?,?,?,?,?)'
+            const [result, meta] = await db2.query(sql, [Fname = Fname, Lname = Lname, email = email, password = password, gender, country = country, birth_date = birth_date, language = language])
+            await db2.commit();
+            
+            
+            console.log("phase 2 done");
+            // second: handel the token information
+            console.log(result.insertId)
+            // this is the defult user after signin it's will be signed as normal user that is why there is user_type 2 and teach_status 0 
+            let data = {
+                user_id: result.insertId, // this is came from the database user table for user_id incrementer
+                userType: 2,
+                teach_status: 0,
+                Fname: Fname,
+                Lname: Lname,
+            }
+
+            const token = await jwt.sign({ data }, SECRET, { expiresIn: parseInt(EXPIRESIN) })
+            let user = await jwt.verify(token, SECRET)
+            let expiresIn = new Date(user.exp * 1000)
+            console.log(user.exp)
+            console.log(expiresIn)
+            console.log("-------------")
+            console.log("token and expiresIn ara set")
+
+            console.log("phase 3 done")
+            // third: insert the log 
+            sql = 'INSERT INTO logs (user_id,token,expire_date) VALUES(?,?,?)'
+            const [result2, meta2] = await db2.query(sql, [data.user_id, token, expiresIn]);
+            await db2.commit();
+
+            console.log('success!');
+            return res.status(200).json({ msg: "user has been created successfuly", token: token })
+        } catch (err) {
+            
+            db2.rollback();
+            // if (err.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+            if (err) return res.status(400).json({ msg: "Someting went wrong", error: err })
+            
+        }finally {
+            if (db2) await db2.destroy();
+        }
+    }
+
+});
+
+// this method is archived 
+// deprecated
+/*
+
 router.post('/signup', signupValidation, async (req, res) => {
 
     // console.log("1")
@@ -134,10 +212,94 @@ router.post('/signup', signupValidation, async (req, res) => {
 
     }
 })
+*/
 
 
+///// TODO: signin 
+router.post('/signin', signinValidation, async (req, res) => {
+    
+    // console.log('inside signin post request')
+    if (res.locals.erorrslog) { return res.status(400).json({ msg: "validation error", errors: res.locals.erorrslog }) }
+    else {
+        if (!res.locals.validatedSigninData) return res.status(500).json({ msg: "validation internal error" });
+        
+        console.log("phase 1 done")
 
-// TODO: signin
+        console.log(res.locals.validatedSigninData)
+        try {
+
+            // basic information for the request
+            let email = res.locals.validatedSigninData.email
+            let password = res.locals.validatedSigninData.password
+
+            // get user information
+            let sql = ' SELECT * FROM user WHERE email = ? ';
+            const [result,meta] = await db2.query(sql, email);
+            // console.log("user: ",result)
+
+            if(result.length == 0) return res.status(401).json({ msg: "wrong user information"});
+
+            // console.log(result)
+            // console.log(result[0].password)
+            
+            // compare user password with db password
+            let passIsValid = await bcrypt.compare(password, result[0].password)
+
+            // if the password == then create the token then update the logs
+            if (passIsValid) {
+
+                let date = new Date().toLocaleDateString();
+                let data = {
+                    user_id: result[0].user_id,
+                    userType: result[0].userType,
+                    teach_status: result[0].teach_status,
+                    Fname: result[0].Fname,
+                    Lname: result[0].Lname,
+                    createdAt:date
+                };
+
+                // creating the token
+                const token = await jwt.sign({ data }, SECRET, { expiresIn: parseInt(EXPIRESIN) });
+                let user = await jwt.verify(token, SECRET);
+                let expiresIn = new Date(user.exp * 1000);
+                // console.log(user.exp);
+
+                console.log("phase 2 done");
+
+                // update the log record
+                sql = 'UPDATE logs SET token = ?, expire_date = ?, status = ? WHERE user_id = ?';
+                const [result2,meta2] = await db2.query(sql, [token, expiresIn, 1, data.user_id]);
+                
+                // console.log("update result: ",result2)
+
+                // in case there is no log record just give this error
+                // TODO: decide what will happen in this case ??
+                if(result2.affectedRows == 0) return res.status(500).json({ msg: "something went wrong!!" })
+
+                // log this msg and send the response
+                console.log('success!');
+                return res.status(200).json({ msg: "logged in successfully", token })
+
+
+            }// end of passIsValid
+            // in case the password do not match then send this error
+            else return res.status(401).json({ msg: "wrong user information"});
+
+        } catch (err) {
+            // in case the error from db then this is a general error msg for it
+            if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+            // this to captrue any error and try to send the error msg if it's applicable.
+            return res.status(400).json({ msg: "Someting went wrong", error: err })
+            
+        }
+    }// end of else
+});
+
+// this method is archived 
+// deprecated
+/*
+
 router.post('/signin', signinValidation, async (req, res) => {
     console.log('inside signin post request')
     if (res.locals.erorrslog) { return res.status(400).json({ msg: "validation error", errors: res.locals.erorrslog }) }
@@ -237,16 +399,20 @@ router.post('/signin', signinValidation, async (req, res) => {
 
 })
 
+*/
+
 
 // TODO: sginout -- 
-// ! this from front end just delete the token
+// ! this from front end just delete the token and set the token as false
 
 // TODO: create requestr for teacher account (user)
 // ! teacherAccountRequestValidation middelware function needs more validation for CV-url
 router.post('/createTeachReq', isLoggedin, isStudent, teacherAccountRequestValidation, async (req, res) => {
 
+
     if (!res.locals.validatedData) res.status(400).json({ msg: "Invalid request" })
 
+    
     let userID = res.locals.user.data.user_id
     let description = res.locals.validatedData.description
     let CV_url = res.locals.validatedData.CV_url
@@ -255,22 +421,33 @@ router.post('/createTeachReq', isLoggedin, isStudent, teacherAccountRequestValid
     let status_txt = res.locals.validatedData.status_txt
 
     try {
+        // get the user requests
         let sql = 'SELECT userID,status,status_txt FROM request WHERE userID = ? AND (status = 2 OR status = 1 )'
-        let submit = await db.query(sql, [userID = userID])
+        let [submit,meta] = await db2.query(sql, [userID = userID])
+        
+        // console.log(submit)
 
-        let records = submit[0]
-        console.log(submit[0])
+        // if the length > 0 this mean for this user there is a request under revision or the user is a teacher
+        if (submit.length > 0) return res.status(400).json({ msg: "your already have an order under revision, or you already a teacher" })
 
-        if (records.length > 0) return res.status(400).json({ msg: "your already have an order under revision, or you already a teacher" })
-
+        // in case the user is student and there is no old under revision request then create this request.
         sql = ' INSERT INTO request (userID,description,CV_url,yearsOfExperience,status,status_txt) VALUES(?,?,?,?,?,?)'
-        submit = await db.query(sql, [userID = userID, description = description, CV_url = CV_url, yearsOfExperience = yearsOfExperience, status = status, status_txt = status_txt])
-        console.log(submit)
+        let [submit2,meta2] = await db2.query(sql, [userID = userID, description = description, CV_url = CV_url, yearsOfExperience = yearsOfExperience, status = status, status_txt = status_txt])
+        // console.log(submit2)
+
+        // TODO!: just double check if I need this or not.
+        // this is a double check if the user has request under revision or he is a teacher.
+        if(submit2.affectedRows == 0) return res.status(400).json({ msg: "your already have an order under revision, or you already a teacher" })
+        
+        // return response
         return res.status(200).json({ msg: "your create request has been send successfuly" })
-    } catch (e) {
-        if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        return res.status(400).json(e)
+    
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }
 
 
@@ -280,50 +457,70 @@ router.post('/createTeachReq', isLoggedin, isStudent, teacherAccountRequestValid
 // TODO: edit request for teacher account (user)
 router.post('/editTeachReq', isLoggedin, isStudent, teacherAccountRequestValidation, async (req, res) => {
 
-    if (!res.locals.validatedData) res.status(400).json({ msg: "Invalid request" })
+    if (!res.locals.validatedData) return res.status(400).json({ msg: "Invalid request" })
 
+    // basic information
     let userID = res.locals.user.data.user_id
     let description = res.locals.validatedData.description
     let CV_url = res.locals.validatedData.CV_url
     let yearsOfExperience = res.locals.validatedData.yearsOfExperience
-    let request_id = 1
+    let request_id = null
 
     if (req.body.request_id) request_id = req.body.request_id
-    console.log("sss")
-    console.log(request_id)
-    try {
+    
+    if(!request_id) return res.status(400).json({ msg: "Invalid request" })
 
+    console.log("phase 1 done")
+
+    try {
+        // update when and only when this request is for this user.
+        // change only the basick information
         let sql = ' UPDATE request SET description = ?, CV_url = ?, yearsOfExperience = ? WHERE request_id = ? && userID = ?'
-        let submit = await db.query(sql, [description, CV_url, yearsOfExperience, request_id, userID])
-        console.log(submit)
+        let [submit,meta] = await db2.query(sql, [description, CV_url, yearsOfExperience, request_id, userID])
+        
+
+        // in case the affcted rows are 0 then this mean ether the request_id or user_id is wrong.
+        if (submit.affectedRows == 0) return res.status(400).json({ msg: "there is no such a request" })
+
+        console.log("success")
         return res.status(200).json({ msg: "your update request has been send successfuly" })
 
-    } catch (e) {
-        if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        return res.status(400).json(e)
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }
 
 
 })
 
 // TODO: get all user requests for teacher account (user)
-// ! may need to add teacher permision
-router.get('/getMyTeachReq', isLoggedin, isStudent, async (req, res) => {
+///// ! may need to remove teacher permision
+router.get('/getMyTeachReq', isLoggedin, async (req, res) => {
 
+    // basic information
     let userID = res.locals.user.data.user_id
 
     try {
 
+        // get all requests for this user by his id.
         let sql = 'SELECT * FROM request WHERE userID = ?'
-        let submit = await db.query(sql, [userID])
-        console.log(submit[0])
+        let submit = await db2.query(sql, [userID])
+
+        // in case there is no request by this user 
+        if (submit[0].length <= 0) return res.status(503).json({ msg: "not found"})
+
+
         return res.status(200).json({ msg: "success", data: submit[0] })
 
-    } catch (e) {
-        if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        return res.status(400).json(e)
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }
 
 
@@ -332,19 +529,22 @@ router.get('/getMyTeachReq', isLoggedin, isStudent, async (req, res) => {
 // TODO: get all unrevisioned requests for teacher account (admin)
 router.get('/getAllNewTeachReq', isLoggedin, isAdmin, async (req, res) => {
 
-    // let userID = res.locals.user.data.user_id
-
     try {
-
+        // get all request where there status is unrevisioned
         let sql = 'SELECT * FROM request WHERE status = 2'
-        let submit = await db.query(sql)
-        console.log(submit[0])
-        return res.status(200).json({ msg: "success", data: submit[0] })
+        let submit = await db2.query(sql)
+        
+        // in case there is no request by this user 
+        if (submit[0].length <= 0) return res.status(503).json({ success: true, msg: "not found"})
 
-    } catch (e) {
-        if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        return res.status(400).json(e)
+        return res.status(200).json({ success: true, msg: "success", data: submit[0] })
+
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }
 
 
@@ -354,32 +554,35 @@ router.get('/getAllNewTeachReq', isLoggedin, isAdmin, async (req, res) => {
 
 // TODO: teach_ status check if it's need change after accepts
 // // not done need to check if its work fine or not
+// ! need to check if I need to just change the requests where the status is only 2 or I leave it as a genral case
 router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
 
-    console.log("inside processTechReq")
-    console.log(req.body)
-    let errors = []
 
+    // basic variable I need
+    let errors = []
     let request_id = undefined
     let status = undefined
     let status_txt = undefined
     let userID = undefined
 
+    // get the accept code and reject code from the env
     let accept = process.env.ACCEPT || 1
     let reject = process.env.REJECT || 0
 
+    // in case there is not request_id or user_id then push these errors to the errors array
     if (!req.body.request_id) errors.push('missing field Request ID')
     if (!req.body.userID) errors.push('missing field User ID')
 
     // if (!req.body.status) errors.push('missing field Status')
 
+    // if the status is not 0,1,2 and there is no status_txt then push these errors to the errors array
     if (!(req.body.status > -1 && req.body.status < 2)) errors.push('Status input is invalid')
-
     if (!req.body.status_txt) errors.push('missing field Text')
 
+    // if the errors array length is > 0 then send response with bad request
+    if (errors.length > 0) return res.status(400).json({success:false, msg: "Invalid input", erorrslog: errors })
 
-    if (errors.length > 0) return res.status(400).json({ msg: "Invalid input", erorrslog: errors })
-
+    // set the basic information
     request_id = req.body.request_id
     userID = req.body.userID
     status = (req.body.status) ? 1 : 0;
@@ -390,16 +593,16 @@ router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
         try {
 
             let sql = 'UPDATE request SET status = ' + reject + ', status_txt = ? WHERE request_id = ? && userID = ?'
-            let submit = await db.query(sql, [status_txt, request_id, userID])
+            let submit = await db2.query(sql, [status_txt, request_id, userID])
             console.log(submit)
             return res.status(200).json({ msg: "user request teacher account has been rejected successfuly" })
 
-        } catch (e) {
-
-            if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-            if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-            return res.status(400).json(e)
-
+        } catch (err) {
+            // in case the error from db then this is a general error msg for it
+            if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+                
+            // this to captrue any error and try to send the error msg if it's applicable.
+            return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
         }
 
         // for accepting
@@ -407,86 +610,89 @@ router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
 
         try {
 
-            console.log(222)
-            db2.beginTransaction(function (err) {
-                //
-                console.log(1)
-                if (err) { return res.status(400).json({ msg: "error starting change student to teacher" }) }
-                let sql = 'SELECT userType FROM user WHERE user_id = ?'
-                db2.query(sql, [userID], (err, result, fields) => {
-                    console.log(result[0].userType)
-                    if (err || result[0].userType != 2) {
-                        return db2.rollback(function () {
-                            // return "Erorr in update request query"
-                            if (result[0].userType != 2) return res.status(400).json({ msg: "user ether a teacher or admin" })
-                            if (err) return res.status(400).json({ msg: "Someting went wrong", error: err })
-
-                        });// end of rollback #1
-                    }
-                    console.log(2)
-                    sql = 'UPDATE request SET status = ' + accept + ', status_txt = ? WHERE request_id = ? && userID = ?'
-                    db2.query(sql, [status_txt, request_id, userID], (err, result, fields) => {
-                        console.log(result.affectedRows)
-                        if (err || result.affectedRows === 0) {
-                            return db2.rollback(function () {
-                                // return "Erorr in update request query"
-                                return res.status(400).json({ msg: "error user ID or request ID is wrong" })
-                            });// end of rollback #1
-                        }
-                        console.log(3)
-                        sql = "UPDATE user SET userType = 3 WHERE user_id = ?"
-                        db2.query(sql, [userID], (err, result, fields) => {
-                            if (err || result.affectedRows === 0) {
-                                return db2.rollback(function () {
-                                    // return "Erorr in update user query"
-                                    return res.status(400).json({ msg: "error in updating user data" })
-                                });
-                            }
-
-                            db2.commit(function (err) {
-                                if (err) {
-                                    return db2.rollback(function () {
-                                        // return "Erorr commit query"
-                                        return res.status(400).json({ msg: "error in commitng the data" })
-                                    });
-                                }
-                                console.log('success!');
-                                return res.status(200).json({ msg: "user request teacher account has been accepted successfuly" })
-
-                            });// end of commit        
-                        })// end of query 2
-                    })// end of query 2
-                })// end of query 1
-            })// end of beginTransaction function
-
-        } catch (e) {
-            return res.status(400).json({ msg: "error in trying to change student to teacher permisson", error: e })
-        }
+            // console.log(222)
+            // start transaction
+            await db2.beginTransaction();
+            console.log("phase 1 done");
+            
+            // get the user type by his id just to check if the user is not admin or teacher
+            let sql = 'SELECT userType FROM user WHERE user_id = ?';
+            const [submit,meta] = await db2.query(sql, [userID]);
+            
+            // if the submit length is 0 then the request is wrong
+            if (submit.length <= 0) return res.status(400).json({ success:false, msg: "ether this user or request in not available" }); 
+            // if the user type is not 2 then this user is eather admin or a teacher
+            if (submit[0].userType != 2) return res.status(400).json({ success:false, msg: "user ether a teacher or admin" }); 
+            // console.log(333)
+            
+            await db2.commit();
+            console.log("phase 2 done");
+            
+            // update the request information
+            sql = 'UPDATE request SET status = ' + accept + ', status_txt = ? WHERE request_id = ? && userID = ?';
+            const [submit2,meta2] = await db2.query(sql, [status_txt, request_id, userID]);
+            // in case there is no affected rows then this mean the user id or request id is wrong
+            if (submit2.affectedRows === 0) return res.status(400).json({ success:false, msg: "error user ID or request ID is wrong" });
+            
+            await db2.commit();
+            console.log("phase 3 done");
+            // console.log(444)
+            
+            // update user type information in user table
+            sql = "UPDATE user SET userType = 3 WHERE user_id = ?";
+            const [submit3,meta3] = await db2.query(sql, [userID]);
+            // in case there is no affected rows then this means there is no such a user with this id
+            if (submit3.affectedRows === 0) return res.status(400).json({ success:false, msg: "error in updating the user data" });
+            await db2.commit();
+            
+            console.log('success!');
+            return res.status(200).json({ msg: "user request teacher account has been accepted successfuly" })
 
 
-    }
+            }// END OF THE TRY FOR THE TRY FOR THE TRANSACTION 
+            catch (err) {
+                // in case the error from db then this is a general error msg for it
+                if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+                
+                // this to captrue any error and try to send the error msg if it's applicable.
+                return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
+            }// END OF THE CATCH
+
+
+    }// END OF THE ELSE
 
 
 })
 
-// TODO: get all user user
-router.get('/getAllUsers', isLoggedin, isAdmin, async (req, res) => {
-    // lol
-    let sql = 'SELECT * FROM user RIGHT JOIN usertype ON usertype_id = userType ;'
+// TODO: get all user user (admin)
+router.get('/getAllUsers', isLoggedin, isAdmin, async (req, res) => { 
+    
+    try {
 
-    let submit = 0
-    console.log(1)
-    try { submit = await db.query(sql) }
-    catch (e) {
-        if (e.code == "ER_BAD_NULL_ERROR") return res.status(400).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        return res.status(400).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
+        // get all users information with the user type sorted by their ids
+        let sql = 'SELECT user_id,Fname,Lname,gender,email,country,birth_date,created_at,phone,account_status,teach_status,language,userTitle,userType FROM user RIGHT JOIN usertype ON usertype_id = userType order by user_id ASC  ;'
+        const submit = await db2.query(sql) 
+
+        // in case there is no users just return this
+        if( submit[0].length <= 0) return res.status(503).json({ success: true, msg: "not found"})
+
+
+        return res.status(200).json({ success: true, msg: "success", data: submit[0].map((e) => {
+            return { user_id: e.user_id, Fname: e.Fname, Lname: e.Lname, gender: e.gender,
+            email: e.email, country: e.country, birth_date: e.birth_date, language: e.language,
+            UserType: e.userTitle, usertype_id: e.userType_id, teach_status: e.teach_status,
+            account_status: e.account_status, phone: e.phone,joined_at: e.created_at }
+            })// end of map func
+        })// end of json
+
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }
-    if (!submit) return res.status(400).json({ msg: 'error' })
-    let d = submit[0].map((e) => {
-        return { user_id: e.user_id, Fname: e.Fname, Lname: e.Lname, gender: e.gender, email: e.email, country: e.country, birth_date: e.birth_date, language: e.language, UserType: e.userTitle, usertype_id: e.userType_id }
-    })
-    console.log(d)
-    return res.status(200).json({ data: d })
+
 
 })
 // TODO: find user (teacher)
