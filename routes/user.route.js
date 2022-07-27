@@ -100,7 +100,7 @@ router.post('/signup', signupValidation, async (req, res) => {
             return res.status(200).json({ msg: "user has been created successfuly", token: token })
         } catch (err) {
             
-            db2.rollback();
+            await db2.rollback();
             // if (err.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
             if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
             
@@ -651,6 +651,7 @@ router.post('/processTechReq', isLoggedin, isAdmin, async (req, res) => {
 
             }// END OF THE TRY FOR THE TRY FOR THE TRANSACTION 
             catch (err) {
+                await db2.rollback();
                 // in case the error from db then this is a general error msg for it
                 if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
                 
@@ -695,64 +696,104 @@ router.get('/getAllUsers', isLoggedin, isAdmin, async (req, res) => {
 
 
 })
+
+
 // TODO: find user (teacher)
-router.get('/getTeacher/', isLoggedin, (req, res) => {
-    console.log('inside get teacher by id or email , or full name')
+router.get('/getTeacher/', isLoggedin, async(req, res) => {
+    // console.log('inside get teacher by id or email , or full name')
+    
+    // basic data preperations
     let id = undefined
     let name = undefined
     let email = undefined
 
+    // setting the data if it's available
     if (req.query.id) id = req.query.id
     if (req.query.name) name = req.query.name.split(' ')[0]
     if (req.query.email) email = req.query.email
 
-    if (id === undefined && name === undefined && email === undefined) return res.status(400).json({ msg: 'you need to send email or id or first name' })
+    // if all the data is undefinded then return erorr
+    if (id === undefined && name === undefined && email === undefined) return res.status(400).json({ success: false, msg: 'you need to send email or id or first name' })
+    // if the id is availabe and it's length <= 4 digit then it's short
+    // if the name is availabe and it's length < 2 chars then it's short
+    if ( ( id != undefined  && id.length < 5) || ( name != undefined  && name.length < 2) ) return res.status(400).json({ success: false, msg: 'id or name is short' })
 
-    let sql = " SELECT * FROM user INNER JOIN usertype ON usertype_id = userType WHERE userType = 3 AND ( Fname LIKE ? OR  email LIKE ? OR user_id LIKE ? ) ";
-    db.query(sql, [name + "%", email + "%", id + "%"]).then((ele) => {
-        console.log(ele[0])
+    // get all information form the user if its teacher and the search filter is write
+    let sql = " SELECT user_id,Fname,Lname,gender,email,country,birth_date,created_at,phone,account_status,teach_status,language,userTitle,userType FROM user INNER JOIN usertype ON usertype_id = userType WHERE userType = 3 AND ( Fname LIKE ? OR  email LIKE ? OR user_id LIKE ? ) ";
+    try {
 
-        if (ele[0].length < 1) return res.status(200).json({ msg: "no item with your speicification has been found" })
+        const [submit,meta] = await db2.query(sql, [name + "%", email + "%", id + "%"])
+        // console.log("submit: ",submit)
+        // if the array it's empty return there is no result found
+        if (submit.length <= 0) return res.status(503).json({success: true,  msg: "no item with your speicification has been found" })
+        // console.log("passed the if submit.length")
 
-        return res.status(200).json({
-            data: ele[0].map((e) => {
-                return { user_id: e.user_id, Fname: e.Fname, Lname: e.Lname, gender: e.gender, email: e.email, country: e.country, birth_date: e.birth_date, language: e.language, UserType: e.userTitle, usertype_id: e.userType_id }
-            })
+        // if it's passed then return the result
+        return res.status(200).json({  success: true, msg:"success",
+            data: submit.map((e) => {
+                return { user_id: e.user_id, Fname: e.Fname, Lname: e.Lname, gender: e.gender,
+                email: e.email, country: e.country, birth_date: e.birth_date, language: e.language,
+                UserType: e.userTitle, usertype_id: e.userType_id, teach_status: e.teach_status,
+                account_status: e.account_status, phone: e.phone,joined_at: e.created_at }
+                })// end of map func
         })
-
-    }).catch(err => {
-        console.log(err)
-    })
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
+    }
 
 })
 
-router.get('/getUser/', isLoggedin, isAdmin, (req, res) => {
-    console.log('inside get teacher by id or email , or full name')
+router.get('/getUser/', isLoggedin, isAdmin, async(req, res) => {
+    // console.log('inside get teacher by id or email , or full name')
+    
+    // basic data preperations
     let id = undefined
     let name = undefined
     let email = undefined
 
+    // setting the data if it's available
     if (req.query.id) id = req.query.id
     if (req.query.name) name = req.query.name.split(' ')[0]
     if (req.query.email) email = req.query.email
 
-    if (id === undefined && name === undefined && email === undefined) return res.status(400).json({ msg: 'you need to send email or id or first name' })
+    // if all the data is undefinded then return erorr
+    if (id === undefined && name === undefined && email === undefined) return res.status(400).json({ success: false, msg: 'you need to send email or id or first name' })
+    
+    // if the id is availabe and it's length <= 4 digit then it's short
+    // if the name is availabe and it's length < 2 chars then it's short
+    if ( ( id != undefined  && id.length < 5) || ( name != undefined  && name.length < 2) ) return res.status(400).json({ success: false, msg: 'id or name is short' })
 
-    let sql = " SELECT * FROM user INNER JOIN usertype ON usertype_id = userType WHERE Fname LIKE ? OR  email LIKE ? OR user_id LIKE ? ";
-    db.query(sql, [name + "%", email + "%", id + "%"]).then((ele) => {
-        console.log(ele[0])
+    // console.log
+    let sql = " SELECT user_id,Fname,Lname,gender,email,country,birth_date,created_at,phone,account_status,teach_status,language,userTitle,userType FROM user INNER JOIN usertype ON usertype_id = userType WHERE Fname LIKE ? OR  email LIKE ? OR user_id LIKE ? order by user_id ASC";
+    try{
 
-        if (ele[0].length < 1) return res.status(200).json({ msg: "no item with your speicification has been found" })
+        const [submit,meta] = await db2.query(sql, [name + "%", email + "%", id + "%"])
+        // console.log("submit: ",submit)
+        // if the array it's empty return there is no result found
+        if (submit.length <= 0) return res.status(503).json({success: true,  msg: "no item with your speicification has been found" })
+        
+        // console.log("passed the if submit.length")
 
-        return res.status(200).json({
-            data: ele[0].map((e) => {
-                return { user_id: e.user_id, Fname: e.Fname, Lname: e.Lname, gender: e.gender, email: e.email, country: e.country, birth_date: e.birth_date, language: e.language, UserType: e.userTitle, usertype_id: e.userType_id }
-            })
+        // if it's passed then return the result
+        return res.status(200).json({  success: true, msg:"success",
+            data: submit.map((e) => {
+                return { user_id: e.user_id, Fname: e.Fname, Lname: e.Lname, gender: e.gender,
+                email: e.email, country: e.country, birth_date: e.birth_date, language: e.language,
+                UserType: e.userTitle, usertype_id: e.userType_id, teach_status: e.teach_status,
+                account_status: e.account_status, phone: e.phone,joined_at: e.created_at }
+                })// end of map func
         })
-
-    }).catch(err => {
-        console.log(err)
-    })
+    }catch(err) {
+         // in case the error from db then this is a general error msg for it
+         if (err.code) return res.status(500).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+         // this to captrue any error and try to send the error msg if it's applicable.
+         return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
+    }
 
 })
 
@@ -761,80 +802,52 @@ router.get('/getUser/', isLoggedin, isAdmin, (req, res) => {
 // // include password validation
 router.post('/changePassword', isLoggedin, passwordValidation, async (req, res) => {
 
-    if (!res.locals.validatedData) return res.status(400).json({ msg: "validation error" })
-    if (!res.locals.user) return res.status(400).json({ msg: "user data not found" })
+    // check if there is error is errors from the middelware
+    if (!res.locals.validatedData) return res.status(400).json({success: false, msg: "validation error" })
+    if (!res.locals.user) return res.status(404).json({success: false, msg: "user data not found" })
 
-    console.log(res.locals.user)
+    try {
+        // console.log(1)
 
-
-
-
-    console.log(222)
-    db2.beginTransaction(function (err) {
-        //
-        console.log(1)
-        if (err) { return res.status(400).json({ msg: "error starting change student to teacher" }) }
+        // get current user_id and password
         let sql = 'SELECT user_id,password FROM user WHERE user_id = ?'
-        db2.query(sql, [res.locals.user.data.user_id], async (err, result, fields) => {
+        const [submit,meta] = await db2.query(sql, [res.locals.user.data.user_id]);
+
+        // console.log(submit[0])
+        // console.log(2)
+        
+        // check if the passwords are matched new and old
+        let passIsValid = await bcrypt.compare(req.body.originalPassword, submit[0].password)
+        if (!passIsValid) return res.status(400).json({success: false, msg: "password dont match the original password" })
+        
+        // let hashedPassword = "ss"
+        
+        // console.log(3)
+        // in case they dont match then hash the new password
+        const hashedPassword = await bcrypt.hash(req.body.newPassword, parseInt(salt))
+        if (!hashedPassword) res.status(400).json({ msg: 'something went wrong after hash' })
+        
+        // console.log(4)
+
+        // update the password for the user
+        sql = 'UPDATE user SET password = ? WHERE user_id = ?'
+        const [submit2,meta2] = await db2.query(sql, [hashedPassword, submit[0].user_id])
+        // console.log(submit2)
+
+        // in case no rows affected then there is problem in update querey
+        if (submit2.affectedRows === 0) return res.status(400).json({ success:false, msg: "error in updating the user data" });
+
+        // return the success msg
+        return res.status(200).json({ success: true, msg:"user password has been updated successfully" })
 
 
-            if (err) {
-                return db2.rollback(function () {
-                    // return "Erorr in update request query"
-                    if (err) return res.status(400).json({ msg: "user not found", error: err })
-
-                });// end of rollback #1
-            }
-
-            try {
-                let passIsValid = await bcrypt.compare(req.body.originalPassword, result[0].password)
-                if (!passIsValid) return res.status(400).json({ msg: "password dont match the original password" })
-
-            } catch (e) {
-                res.status(400).json({ msg: 'something went wrong in compare', err: e })
-            }
-
-            console.log(2)
-            console.log(result[0])
-            let hashedPassword = "ss"
-
-            try {
-                hashedPassword = await bcrypt.hash(req.body.newPassword, parseInt(salt))
-            } catch (e) {
-                res.status(400).json({ msg: 'something went wrong in hash', err: e })
-            }
-
-            if (hashedPassword === "ss") res.status(400).json({ msg: 'something went wrong after hash' })
-
-            sql = 'UPDATE user SET password = ? WHERE user_id = ?'
-            db2.query(sql, [hashedPassword, result[0].user_id], (err, result, fields) => {
-                console.log(result.affectedRows)
-                if (err || result.affectedRows === 0) {
-                    return db2.rollback(function () {
-                        // return "Erorr in update request query"
-                        return res.status(400).json({ msg: "something went wrong in update" })
-                    });// end of rollback #2
-                }
-                console.log(3)
-
-                db2.commit(function (err) {
-                    if (err) {
-                        return db2.rollback(function () {
-                            // return "Erorr commit query"
-                            return res.status(400).json({ msg: "error in commitng the data" })
-                        });
-                    }
-                    console.log('success!');
-                    return res.status(200).json({ msg: "change password request has been done successfuly" })
-
-                });// end of commit        
-
-            })// end of query 2
-        })// end of query 1
-    })// end of beginTransaction function
-
-
-
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
+    }
 
 })
 
