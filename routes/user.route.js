@@ -854,11 +854,14 @@ router.post('/changePassword', isLoggedin, passwordValidation, async (req, res) 
 // TODO: edit user info
 router.post('/editUserInfo', isLoggedin, editUserInfoValidation, async (req, res) => {
 
-    if (res.locals.erorrslog) { return res.status(400).json({ msg: "validation error", errors: res.locals.erorrslog }) }
-
+    // in case there is errors from the middelware check then return the errors log
+    if (res.locals.erorrslog) { return res.status(400).json({ success: false, msg: "validation error", errors: res.locals.erorrslog }) }
     else {
 
-        if (!res.locals.validatedData) return res.status(500).json({ msg: "validation internal error" });
+        // in case there is validation error send the error
+        if (!res.locals.validatedData) return res.status(500).json({ success: false, msg: "validation internal error" });
+
+        // basic data
         let Fname = res.locals.validatedData.Fname
         let Lname = res.locals.validatedData.Lname
         let gender = res.locals.validatedData.gender
@@ -869,16 +872,20 @@ router.post('/editUserInfo', isLoggedin, editUserInfoValidation, async (req, res
 
         try {
             console.log(res.locals.user.data.user_id)
+            // update the user information where is the user_id = user_id
             let sql = ' UPDATE user SET Fname = ?, Lname = ?, gender = ?, email = ?, country = ?, birth_date = ?, language = ? WHERE user_id = ? '
-            let submit = await db.query(sql, [Fname, Lname, gender, email, country, birth_date, language, parseInt(res.locals.user.data.user_id)])
+            let submit = await db2.query(sql, [Fname, Lname, gender, email, country, birth_date, language, parseInt(res.locals.user.data.user_id)])
             console.log(submit)
-
-            if (submit[0].changedRows > 0) return res.status(200).json({ msg: 'user personal data has been changed successfuly' })
-            else return res.status(200).json({ msg: 'same data is submitted' })
-        } catch (e) {
-            if (e.code == "ER_DUP_ENTRY") return res.status(404).json({ msg: 'Duplicate entry', errorrmsg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-            if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-            return res.status(400).json(e)
+            // if the changed rows > 0 this mean there is change in the data then send success response
+            if (submit[0].changedRows > 0) return res.status(200).json({success: true, msg: 'user personal data has been changed successfuly' })
+            // there is no change in the data so send this response
+            else return res.status(200).json({success: false, msg: 'same data is submitted' })
+        } catch (err) {
+            // in case the error from db then this is a general error msg for it
+            if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+                
+            // this to captrue any error and try to send the error msg if it's applicable.
+            return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
         }// end of catch
 
 
@@ -888,43 +895,66 @@ router.post('/editUserInfo', isLoggedin, editUserInfoValidation, async (req, res
 
 })
 
-// ? TODO: delete user ****
+// ? TODO: delete user **** 
 router.post('/deleteUser', isLoggedin, isAdmin, async (req, res) => {
+
     // just change the account_status to false
 
-    if (!req.body.user_id) return res.status(400).json({ msg: 'you need to send the user ID' })
+    // in case the admin did not send the user id then send this msg
+    if (!req.body.user_id) return res.status(400).json({ success: false, msg: 'you need to send the user ID' })
 
     try {
         console.log(req.body.user_id)
+
+        // update the account status of a user to 0 if the user_id = user_id
         let sql = ' UPDATE user SET account_status = 0 WHERE user_id = ? '
-        let submit = await db.query(sql, [req.body.user_id])
+        let submit = await db2.query(sql, [req.body.user_id])
         console.log(submit)
 
-        if (submit[0].changedRows > 0) return res.status(200).json({ msg: 'user has been deactivated successfuly' })
-        else return res.status(200).json({ msg: 'user already deactivated' })
-    } catch (e) {
-        if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        return res.status(400).json(e)
-    }// end of catch
+        // if the changed rows > 0 then there is somthing changed return success true
+        if (submit[0].changedRows > 0 && submit[0].affectedRows > 0) return res.status(200).json({ success: true, msg: 'user has been deactivated successfuly' })
+
+        // if the changed rows ==0 then that means there is no change so it's mean it's already deactivated
+        else if (submit[0].affectedRows > 0) return res.status(200).json({ success: false, msg: 'user already deactivated' })
+        else return res.status(200).json({ success: false, msg: 'user don\'t exist ' })
+
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
+    }
 
 })
 
 router.post('/activateUser', isLoggedin, isAdmin, async (req, res) => {
     // just change the account_status to false
 
-    if (!req.body.user_id) return res.status(400).json({ msg: 'you need to send the user ID' })
+    if (!req.body.user_id) return res.status(400).json({ success: false, msg: 'you need to send the user ID' })
 
     try {
         console.log(req.body.user_id)
+
+        // update the account status of a user to 1 if the user_id = user_id
         let sql = ' UPDATE user SET account_status = 1 WHERE user_id = ? '
-        let submit = await db.query(sql, [parseInt(req.body.user_id)])
+        let submit = await db2.query(sql, [parseInt(req.body.user_id)])
         console.log(submit)
 
-        if (submit[0].changedRows > 0) return res.status(200).json({ msg: 'user has been activated successfuly' })
-        else return res.status(200).json({ msg: 'user already active' })
-    } catch (e) {
-        if (e.code == "ER_BAD_NULL_ERROR") return res.status(404).json({ msg: e.message, code: e.code, err_no: e.errno, sql_msg: e.sqlMessage })
-        return res.status(400).json(e)
+        // if the changed rows > 0 and affectedRows > 0 then there is somthing changed return success true
+        if (submit[0].changedRows > 0 && submit[0].affectedRows > 0) return res.status(200).json({ success: true, msg: 'user has been activated successfuly' })
+         
+        // if the affectedRows > 0 then that means there is no change so it's mean it's already deactivated
+        else if (submit[0].affectedRows > 0) return res.status(200).json({ success: false, msg: 'user already deactivated' })
+        // if the changed rows ==0 then that means there is no change so it's mean it's already active
+        else return res.status(200).json({ success: false, msg: 'user don\'t exist ' })
+
+    } catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
     }// end of catch
 
 })
