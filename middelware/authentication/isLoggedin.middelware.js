@@ -21,7 +21,7 @@ module.exports = async ( req, res, next ) => {
         if(submit[0][0].account_status){
             next()
         }else{
-            return res.status(400).json({msg:"your account is deactivated call the admin"})
+            return res.status(400).json({msg:"your account is deactivated or deleted call the admin"})
         }
     }catch(e){
         return res.status(400).json({msg:"Invalid Token",err:e})
