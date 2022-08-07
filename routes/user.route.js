@@ -959,5 +959,30 @@ router.post('/activateUser', isLoggedin, isAdmin, async (req, res) => {
 
 })
 
+// TODO: get teacher by subscription and sessions
+router.get('/selectTeacher', isLoggedin, async (req,res) => {
+
+    // incase there is no id in the url
+    if(!req.query.subscriptionID) return res.status(400).json({ success: false, msg:"missing subscription ID"})
+    
+    try{
+        
+        // get all the sessions for this teacher where the session status is open and subscription_id = subscription_id
+        let sql = 'SELECT session_id,teacher_id,Fname,Lname FROM session JOIN user ON teacher_id = user_id WHERE subscriptionID = ? AND session_status =1'
+        let submit = await db2.query(sql,req.query.subscriptionID)
+        
+        // in case the length is == 0 then there is no result found
+        if (submit[0].length < 1) return res.status(404).json({ success: false, msg: "not found"})
+        console.log(submit[0])
+        return res.status(200).json({ success: true, msg: "success", result: submit[0]})
+    }catch (err) {
+        // in case the error from db then this is a general error msg for it
+        if (err.code) return res.status(404).json({ success: false, msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
+            
+        // this to captrue any error and try to send the error msg if it's applicable.
+        return res.status(400).json({ success: false, msg: "Someting went wrong", error: err })
+    }// end of catch
+})
+
 
 module.exports = router;

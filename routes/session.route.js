@@ -2,8 +2,7 @@ const express = require('express')
 const router = express.Router();
 
 require('dotenv').config({ path: `${__dirname}/../.env` });
-const db = require('../config/db');
-const db2 = require('../config/db2');
+const db = require('../config/db2');
 
 // validations middelware
 const sessionValidation = require('../middelware/validation/session.middelware');
@@ -125,22 +124,7 @@ router.get('/',isLoggedin, isAdmin, async (req,res) => {
 
 })
 
-// TODO: get teacher by subscription and sessions
-router.get('/selectTeacher', isLoggedin, async (req,res) => {
-    if(!req.query.subscriptionID) return res.status(400).json({msg:"missing subscription ID"})
-    console.log("start")
-    try{
-        
-        let sql = 'SELECT session_id,teacher_id,Fname,Lname FROM session JOIN user ON teacher_id = user_id WHERE subscriptionID = ? AND session_status =1'
-        let submit = await db.query(sql,req.query.subscriptionID)
-        if (submit[0].length < 1) return res.status(404).json({msg: "not found"})
-        console.log(submit[0])
-        return res.status(200).json({msg: "success", result: submit[0]})
-    }catch(err){
-        if (err.code) return res.status(404).json({ msg: err.message, code: err.code, err_no: err.errno, sql_msg: err.sqlMessage })
-        return res.status(400).json({msg: "something went wrong", err})
-    }
-})
+
 
 // TODO: delete session
 router.delete('/',isLoggedin, isTeacher, async (req,res) => {
