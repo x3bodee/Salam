@@ -3,7 +3,7 @@ const router = express.Router();
 
 require('dotenv').config({ path: `${__dirname}/../.env` });
 const db = require('../config/db');
-const db2 = require('../config/db2');
+
 
 // validations middelware
 const subscriptionValidation = require('../middelware/validation/subscription.middelware');
